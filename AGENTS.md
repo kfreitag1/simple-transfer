@@ -64,4 +64,6 @@ Bun
 - Workspaces use isolated installs: a package can import only its own declared dependencies, and root `node_modules` holds only tooling.
 - `await Bun.write(path, response)` with a streaming `Response` hung once here; buffer or pipe explicitly.
 - A share-id collision surfaces as `UNIQUE constraint failed: transfer.id`; retry the create transaction with a fresh id.
+- `Bun.serve` drops `Content-Length` on streamed responses (oven-sh/bun#10507), so the app runs on `node:http` through `src/serve.ts`. Do not switch back to `.listen()`.
+- `new Response(file.slice(a, b)).body` streams to the end of the file; `serve` truncates at `Content-Length`.
 - In `bun --filter` scripts the working directory is the package. `env.ts` resolves relative paths against the repository root for that reason.

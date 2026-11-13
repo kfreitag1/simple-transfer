@@ -4,6 +4,7 @@ import { admin, genericOAuth, testUtils } from "better-auth/plugins";
 import type { Db } from "./db/index.ts";
 import * as schema from "./db/schema.ts";
 import type { Env } from "./env.ts";
+import { CLIENT_IP_HEADER } from "./serve.ts";
 
 export type Auth = ReturnType<typeof createAuth>;
 export type User = Auth["$Infer"]["Session"]["user"];
@@ -18,6 +19,7 @@ export function createAuth(env: Env, db: Db, options: { test?: boolean } = {}) {
     secret: env.authSecret,
     database: drizzleAdapter(db, { provider: "sqlite", schema }),
     rateLimit: { enabled: !options.test },
+    advanced: { ipAddress: { ipAddressHeaders: [CLIENT_IP_HEADER] } },
     plugins: [
       admin(),
       options.test

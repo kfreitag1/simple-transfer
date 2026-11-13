@@ -3,7 +3,6 @@ import { HTTPError } from "elysia";
 
 const define = <const C extends ErrorCode>(code: C) => HTTPError.id(code, ERROR_STATUS[code]);
 
-/** Thrown anywhere below a route; Elysia serves them as problem documents. `NotFound` comes from Elysia. */
 export class Unauthorized extends define("unauthorized") {}
 export class Forbidden extends define("forbidden") {}
 export class PasswordRequired extends define("password-required") {}

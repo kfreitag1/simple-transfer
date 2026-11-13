@@ -29,20 +29,21 @@ Dependency direction: `web → shared ← server`. Web imports only the `App` *t
 Server module map (existing files marked ✓, the rest are to be written):
 
 ```
-src/index.ts ✓            boot: env → context → API + web → listen; starts the sweeper
+src/index.ts ✓            boot: env → context → API + web → serve; starts the sweeper
+src/serve.ts ✓            HTTP edge over node:http (see "HTTP edge"), clientIp, blobLength, limitBytes
 src/app.ts ✓              Context, createContext, createApp (composes route plugins under /api)
 src/env.ts ✓  auth.ts ✓  errors.ts ✓  web.ts ✓  db/ ✓  plugins/auth.ts ✓
-src/plugins/rate-limit.ts rateLimit macro + clientIp
-src/storage/local.ts      local-disk adapter;  storage.contract.ts: reusable adapter test suite
+src/plugins/rate-limit.ts rateLimit macro
+src/storage/local.ts ✓    local-disk adapter;  storage.contract.ts ✓: reusable adapter test suite
 src/limits.ts             limitsFor(user), usedBytes(userId)
 src/transfers/service.ts  create, view access, append, finalize, delete, DTO mapping
 src/transfers/routes.ts   thin Elysia plugin over the service
 src/admin/routes.ts
 src/sweeper.ts
-test/harness.ts ✓         createTestApp(): in-memory DB, `request`, `signIn`
+test/harness.ts ✓         createTestApp(): in-memory DB, temp storage, `request`, `signIn`
 ```
 
-Routes stay thin: validate with contract schemas, call a service function taking `(ctx, …)`, return a DTO. Services throw the error classes in `errors.ts`. `Context` gains `storage: Storage` when the adapter lands; tests then give it a temp directory.
+Routes stay thin: validate with contract schemas, call a service function taking `(ctx, …)`, return a DTO. Services throw the error classes in `errors.ts`. `Context` holds `storage: Storage`; tests give it a temp directory.
 
 ## Auth
 
@@ -108,7 +109,7 @@ Server rules for PATCH (route uses `parse: "none"` and streams `request.body`, n
 - Offset differs from the stored size → `offset-mismatch` with the true `offset` (thrown by the storage adapter).
 - Cap the stream at `min(CHUNK_BYTES, file.size − offset)`; exceeding it → `chunk-too-large`.
 - Update `touchedAt`.
-- Start Bun with `maxRequestBodySize` slightly above `CHUNK_BYTES`.
+- `serve` rejects any request body slightly over `CHUNK_BYTES` (`maxBodyBytes`).
 
 Offsets live only in storage. `Transfer.files[].offset` is `storage.size` while uploading and `size` once ready. Zero-byte files need no PATCH and have no blob; download and zip code must not call `storage.read` for them.
 
@@ -123,6 +124,7 @@ Offsets live only in storage. `Transfer.files[].offset` is `storage.size` while 
 
 - File: return `storage.read(key)` so Elysia serves `Range`. Headers: `Content-Type: application/octet-stream`, `Content-Disposition: attachment; filename*=UTF-8''<encoded basename>`, `X-Content-Type-Options: nosniff`. User content is never served inline.
 - Zip: `client-zip` `downloadZip` over `storage.read(key).stream()` per file, stored uncompressed, entry names are the file paths, `Content-Length` from `predictLength`. Streams with constant memory and supports Zip64. Name: `<title or "transfer">.zip`.
+- Every download carries `Content-Length`, so browsers show progress. This is why the app is served by `serve.ts` (below), not `Bun.serve`.
 - `downloads` increments once per zip request and once per file request that has no `Range` header.
 
 ## Storage
@@ -153,7 +155,16 @@ In-memory fixed-window counters in `plugins/rate-limit.ts`, applied with a `rate
 
 Chunk uploads are not rate limited: they are bounded by authentication, declared sizes and quota. `public` and `unlock` are also what make word-based share ids viable.
 
-`clientIp(request, server)` is the only place that decides the client address: the last `X-Forwarded-For` entry when `TRUST_PROXY=true`, otherwise `server.requestIP`. Better Auth's own limiter covers `/api/auth/*` and is enabled outside tests; give it the same address by having the `/auth/*` handlers overwrite an `x-client-ip` header from `clientIp` and setting `advanced.ipAddress.ipAddressHeaders: ["x-client-ip"]`.
+`clientIp` in `serve.ts` is the only place that decides the client address: the last `X-Forwarded-For` entry when `TRUST_PROXY=true`, otherwise the socket peer. `serve` writes it into the `x-client-ip` header (`CLIENT_IP_HEADER`) of every request, replacing whatever the client sent; the rate limiter reads that header, and so does Better Auth's own limiter (`advanced.ipAddress.ipAddressHeaders`), which covers `/api/auth/*` and is enabled outside tests. Requests through `app.handle` in tests have no address and share the key `unknown`.
+
+## HTTP edge
+
+`Bun.serve` replaces a `Content-Length` on any streamed response with chunked encoding (oven-sh/bun#10507), so the zip would download without a total. `serve.ts` therefore serves the Elysia app over Bun's `node:http`, which sends the headers it is given. It bridges `IncomingMessage` to a `Request` and pipes the `Response` back, streaming both ways. Three duties `Bun.serve` used to perform are now explicit:
+- `blobLength` (registered first in `createApp`, `global` scope so it also covers the web app) sets `Content-Length` on a non-Range `Blob` response. Elysia sets it for Range responses.
+- `serve` never writes more than the declared `Content-Length`: Bun streams a sliced file `Blob` (a Range response) to the end of the file, which would corrupt keep-alive connections.
+- `serve` caps request bodies (`maxBodyBytes`).
+
+When the Bun issue is fixed, `serve.ts` can go back to `Bun.serve` and lose these three.
 
 ## Web app
 
@@ -187,7 +198,7 @@ Write a test only where a mistake is plausible and would matter. Do not test fra
 
 **Unit tests (most tests).** Pure logic, no app, no network:
 - `shared`: `resolveLimits` ✓, `checkTransfer` boundaries, `normalizePath` rejections, `uploadTransfer` against a fake `fetch` (resume from offset, mismatch recovery, retry then give up, abort).
-- `server`: storage contract suite run against `local.ts` (append at wrong offset, concurrent appends, `remove` prefix isolation), rate-limit window arithmetic, sweeper selection, `clientIp`.
+- `server`: storage contract suite run against `local.ts` (append at wrong offset, concurrent appends, `remove` prefix isolation), rate-limit window arithmetic, sweeper selection, `clientIp`, and `serve` over real HTTP (streamed `Content-Length`, body cap, client address not spoofable).
 - `web`: `t` interpolation and locale fallback. No component tests.
 
 **Integration tests (few).** Through `createTestApp().request`, real SQLite in memory and a temp storage directory. One per critical flow:
@@ -210,7 +221,7 @@ Development: `compose.dev.yaml` provides a mock OIDC provider; `bun run dev` sta
 Each step ends with `bun run check` passing.
 
 1. ✓ `shared`: `normalizePath`, `checkTransfer`, `uploadTransfer`, with unit tests.
-2. `server`: `storage/local.ts` + contract suite; add `storage` to `Context` and the harness.
+2. ✓ `server`: `storage/local.ts` + contract suite; add `storage` to `Context` and the harness.
 3. `server`: limits, transfers service and routes, sweeper, rate limiting; replace the placeholder `/me`.
 4. `server`: admin routes. Integration tests for steps 2–4.
 5. `web`: session bridge and route guard, then Send, Transfers, Download, Admin.

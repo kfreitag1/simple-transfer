@@ -1,8 +1,11 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { TestHelpers } from "better-auth/plugins";
 import { type Context, createApp, createContext } from "../src/app.ts";
 import { loadEnv } from "../src/env.ts";
 
-/** A fresh app on an in-memory database. Integration tests talk to it through `request`. */
+/** A fresh app on an in-memory database and a temporary storage directory. */
 export function createTestApp() {
   const env = {
     ...loadEnv({
@@ -13,6 +16,7 @@ export function createTestApp() {
       OIDC_CLIENT_SECRET: "test",
     }),
     dbPath: ":memory:",
+    storageDir: mkdtempSync(join(tmpdir(), "st-test-")),
   };
   const ctx: Context = createContext(env, { test: true });
   const app = createApp(ctx);
