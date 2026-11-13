@@ -63,7 +63,7 @@ All four are configurable per layer. Effective limits are `resolveLimits(global,
 
 ## API
 
-All under `/api`. JSON unless noted. Errors are RFC 9457 problem documents with a `code` from `ERROR_STATUS`. No pagination in the MVP.
+All under `/api`. JSON unless noted. Errors are RFC 9457 problem documents with a `code` from `ERROR_STATUS`; on the client they become `ApiError` (`shared/errors.ts`). No pagination in the MVP.
 
 | Method and path | Access | Body → response |
 |---|---|---|
@@ -209,7 +209,7 @@ Development: `compose.dev.yaml` provides a mock OIDC provider; `bun run dev` sta
 
 Each step ends with `bun run check` passing.
 
-1. `shared`: `normalizePath`, `checkTransfer`, `uploadTransfer`, with unit tests.
+1. ✓ `shared`: `normalizePath`, `checkTransfer`, `uploadTransfer`, with unit tests.
 2. `server`: `storage/local.ts` + contract suite; add `storage` to `Context` and the harness.
 3. `server`: limits, transfers service and routes, sweeper, rate limiting; replace the placeholder `/me`.
 4. `server`: admin routes. Integration tests for steps 2–4.
