@@ -7,6 +7,7 @@ import { authPlugin } from "./plugins/auth.ts";
 import { blobLength } from "./serve.ts";
 import { createLocalStorage } from "./storage/local.ts";
 import type { Storage } from "./storage/storage.ts";
+import { transferRoutes } from "./transfers/routes.ts";
 
 /** Everything with state. Built once in `index.ts`; tests build their own (see `test/harness.ts`). */
 export interface Context {
@@ -23,7 +24,7 @@ export function createContext(env: Env, options: { test?: boolean } = {}): Conte
 
 export function createApp(ctx: Context) {
   return (
-    new Elysia({ prefix: "/api" })
+    new Elysia({ prefix: "/api", cookie: { secrets: ctx.env.authSecret, sign: ["unlock"] } })
       .use(blobLength())
       .use(authPlugin(ctx.auth))
       .get("/auth/*", ({ request }) => ctx.auth.handler(request))
@@ -33,6 +34,7 @@ export function createApp(ctx: Context) {
         limits: limitsFor(ctx.db, user),
         usedBytes: usedBytes(ctx.db, user.id),
       }))
+      .use(transferRoutes(ctx))
       // Keeps unknown API paths a JSON 404 instead of falling through to the web app's index.html.
       .get("/*", () => {
         throw new NotFound();
