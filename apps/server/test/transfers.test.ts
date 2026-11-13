@@ -5,6 +5,7 @@ import { uploadTransfer } from "@st/shared/upload";
 import { downloadZip } from "client-zip";
 import { eq } from "drizzle-orm";
 import { limitOverride, transfer as transferTable } from "../src/db/schema.ts";
+import { sweep } from "../src/sweeper.ts";
 import { createTestApp } from "./harness.ts";
 
 /** Deterministic pseudo-random bytes, so a misplaced chunk cannot go unnoticed. */
@@ -155,7 +156,7 @@ test("a password locks a transfer for everyone but its owner until it is unlocke
   expect(await code(request(url, { headers: { cookie: `unlock=${ready.id}` } }))).toBe("invalid-cookie");
 });
 
-test("expired and unfinished transfers are invisible to others", async () => {
+test("expired and unfinished transfers are invisible to others and swept with their blobs", async () => {
   const { ctx, request, create, send, owner } = await setup();
   const { ready: expired } = await send({ a: bytes(5) });
   ctx.db
@@ -173,6 +174,11 @@ test("expired and unfinished transfers are invisible to others", async () => {
   expect((await request(`/api/transfers/${expired.id}`, { headers: owner.headers })).status).toBe(404);
   expect((await request(`/api/transfers/${unfinished.id}`)).status).toBe(404);
   expect((await request(`/api/transfers/${unfinished.id}`, { headers: owner.headers })).status).toBe(200);
+
+  await sweep(ctx, new Date(Date.now() + 25 * 60 * 60 * 1000));
+  expect(ctx.db.select().from(transferTable).all()).toEqual([]);
+  expect(await ctx.storage.size(`${expired.id}/${expired.files[0]!.id}`)).toBe(0);
+  expect(await ctx.storage.size(`${unfinished.id}/${unfinished.files[0]!.id}`)).toBe(0);
 });
 
 test("a non-owner cannot append, finalize or delete, an owner cannot overrun a file, and an admin can delete", async () => {
