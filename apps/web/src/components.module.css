@@ -1,0 +1,148 @@
+.error {
+  display: flex;
+  gap: var(--space-2);
+  color: var(--danger);
+  font-size: var(--text-sm);
+}
+
+.error > :first-child {
+  margin-block-start: 0.1em;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.meta > * + *::before {
+  content: "·";
+  margin-inline: 0.5em;
+}
+
+.incomplete {
+  color: var(--fg);
+  font-weight: 500;
+}
+
+.stat {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+}
+
+.file {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  min-block-size: var(--control);
+  padding-inline: var(--space-2);
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+}
+
+a.file:hover {
+  background: var(--sunken);
+}
+
+.fileIcon,
+.fileMeta {
+  color: var(--muted);
+}
+
+.fileEnd {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.fileMeta {
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.uploads {
+  position: fixed;
+  inset-block-end: var(--space-4);
+  inset-inline-start: var(--space-4);
+  z-index: 1;
+  display: grid;
+  inline-size: min(20rem, calc(100vi - 2 * var(--space-4)));
+  max-block-size: min(40vb, 20rem);
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+  transition:
+    opacity var(--slow) var(--ease),
+    translate var(--slow) var(--ease);
+}
+
+@starting-style {
+  .uploads {
+    opacity: 0;
+    translate: 0 var(--space-2);
+  }
+}
+
+.upload {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  text-decoration: none;
+  transition: background-color var(--fast);
+}
+
+.upload:hover {
+  background: var(--sunken);
+}
+
+.upload + .upload {
+  border-block-start: 1px solid var(--border);
+}
+
+.uploadHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.uploadHead > :nth-child(2) {
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.uploadState {
+  color: var(--muted);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.uploadBar {
+  display: grid;
+  block-size: 3px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--sunken);
+}
+
+.uploadBar > span {
+  inline-size: calc(var(--value) * 100%);
+  border-radius: inherit;
+  background: var(--accent);
+  transition: inline-size 600ms var(--ease);
+}
+
+.uploadBar.failed > span {
+  background: var(--muted);
+}
