@@ -89,28 +89,27 @@ export const verification = sqliteTable(
 export const transfer = sqliteTable(
   "transfer",
   {
-    /** Share link (`/t/:id`): a memorable word triple from `createShareId`. Insert conflicts are retried. */
     id: text("id").primaryKey().$defaultFn(createShareId),
-    /** `restrict`: a user with transfers cannot be deleted, so blobs are never orphaned. */
+    /** `restrict`: a user with transfers cannot be deleted, so blobs are never orphaned */
     ownerId: text("owner_id")
       .notNull()
       .references(() => user.id, { onDelete: "restrict" }),
     title: text("title"),
     message: text("message"),
-    /** `Bun.password` hash, or null when unprotected. */
+    /** `Bun.password` hash, or null when unprotected */
     passwordHash: text("password_hash"),
     status: text("status", { enum: ["uploading", "ready"] })
       .notNull()
       .default("uploading"),
-    /** Sum of declared file sizes. Counts against the owner's quota from creation. */
+    /** Sum of declared file sizes. Counts against the owner's quota from creation */
     size: integer("size").notNull(),
     downloads: integer("downloads").notNull().default(0),
     createdAt: createdAt(),
-    /** Last chunk received. An `uploading` transfer is swept `UPLOAD_TTL_SECONDS` after this. */
+    /** Last chunk received. An `uploading` transfer is swept `UPLOAD_TTL_SECONDS` after this */
     touchedAt: timestamp("touched_at")
       .notNull()
       .$defaultFn(() => new Date()),
-    /** Fixed at creation. Null never expires. */
+    /** Fixed at creation. Null never expires */
     expiresAt: timestamp("expires_at"),
   },
   (t) => [index("transfer_owner_id_idx").on(t.ownerId), index("transfer_expires_at_idx").on(t.expiresAt)],
@@ -123,20 +122,32 @@ export const file = sqliteTable(
     transferId: text("transfer_id")
       .notNull()
       .references(() => transfer.id, { onDelete: "cascade" }),
-    /** Normalized relative path, `/`-separated. Never used as a storage key. */
+    /** Normalized relative path, `/`-separated. Never used as a storage key */
     path: text("path").notNull(),
-    /** Declared size. Bytes received so far are not stored here: `Storage.size` is the source of truth. */
+    /** Declared size. Bytes received so far are not stored here: `Storage.size` is the source of truth */
     size: integer("size").notNull(),
   },
   (t) => [unique("file_transfer_id_path_unique").on(t.transferId, t.path)],
 );
 
-/** Stored limit layers. See `resolveLimits` in @st/shared/limits. */
+/**
+ * What an admin can change about the instance: one row with id 1, absent until something is saved
+ * See `Settings` in @st/shared/contract
+ */
+export const settings = sqliteTable("settings", {
+  id: integer("id").primaryKey(),
+  name: text("name"),
+  accent: text("accent"),
+  logo: text("logo"),
+  updateCheck: integer("update_check", { mode: "boolean" }).notNull().default(true),
+});
+
+/** Global limits and their per-role and per-user overrides. See `LimitOverride` in @st/shared/limits */
 export const limitOverride = sqliteTable(
   "limit_override",
   {
     scope: text("scope").$type<LimitScope>().notNull(),
-    /** `""` for global, a role, or a user id. */
+    /** `""` for global, a role, or a user id */
     subject: text("subject").notNull(),
     values: text("values", { mode: "json" }).$type<Partial<Limits>>().notNull(),
   },

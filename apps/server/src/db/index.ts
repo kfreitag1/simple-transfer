@@ -6,8 +6,9 @@ import { migrate } from "drizzle-orm/bun-sqlite/migrator";
 import * as schema from "./schema.ts";
 
 export type Db = ReturnType<typeof createDb>;
+export type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
-/** Opens the database and applies pending migrations. Pass `":memory:"` in tests. */
+/** Opens the database and applies pending migrations. Pass `":memory:"` in tests */
 export function createDb(path: string) {
   if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
   const sqlite = new Database(path, { strict: true });

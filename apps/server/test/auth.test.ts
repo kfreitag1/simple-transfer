@@ -3,9 +3,10 @@ import { createTestApp } from "./harness.ts";
 
 test("the first user to sign in is admin, later users are not, and anonymous requests are rejected", async () => {
   const { request, signIn } = createTestApp();
-  const me = async (headers?: Headers) => (await request("/api/me", { headers })).json();
+  const role = async (headers: Headers) =>
+    ((await (await request("/api/auth/get-session", { headers })).json()) as { user: { role: string } }).user.role;
 
-  expect(await me((await signIn()).headers)).toMatchObject({ role: "admin" });
-  expect(await me((await signIn()).headers)).toMatchObject({ role: "user" });
-  expect(await me()).toMatchObject({ code: "unauthorized", status: 401 });
+  expect(await role((await signIn()).headers)).toBe("admin");
+  expect(await role((await signIn()).headers)).toBe("user");
+  expect(await (await request("/api/me")).json()).toMatchObject({ code: "unauthorized", status: 401 });
 });

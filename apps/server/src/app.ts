@@ -2,6 +2,7 @@ import { Elysia, NotFound } from "elysia";
 import { type Auth, createAuth } from "./auth.ts";
 import { createDb, type Db } from "./db/index.ts";
 import type { Env } from "./env.ts";
+import { limitsFor, usedBytes } from "./limits.ts";
 import { authPlugin } from "./plugins/auth.ts";
 import { blobLength } from "./serve.ts";
 import { createLocalStorage } from "./storage/local.ts";
@@ -28,7 +29,10 @@ export function createApp(ctx: Context) {
       .get("/auth/*", ({ request }) => ctx.auth.handler(request))
       .post("/auth/*", { parse: "none" }, ({ request }) => ctx.auth.handler(request))
       .get("/health", () => ({ ok: true }))
-      .get("/me", { auth: true }, ({ user }) => ({ id: user.id, role: user.role }))
+      .get("/me", { auth: true }, ({ user }) => ({
+        limits: limitsFor(ctx.db, user),
+        usedBytes: usedBytes(ctx.db, user.id),
+      }))
       // Keeps unknown API paths a JSON 404 instead of falling through to the web app's index.html.
       .get("/*", () => {
         throw new NotFound();

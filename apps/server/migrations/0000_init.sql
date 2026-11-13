@@ -47,6 +47,14 @@ CREATE TABLE `session` (
 --> statement-breakpoint
 CREATE UNIQUE INDEX `session_token_unique` ON `session` (`token`);--> statement-breakpoint
 CREATE INDEX `session_user_id_idx` ON `session` (`user_id`);--> statement-breakpoint
+CREATE TABLE `settings` (
+	`id` integer PRIMARY KEY NOT NULL,
+	`name` text,
+	`accent` text,
+	`logo` text,
+	`update_check` integer DEFAULT true NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE `transfer` (
 	`id` text PRIMARY KEY NOT NULL,
 	`owner_id` text NOT NULL,

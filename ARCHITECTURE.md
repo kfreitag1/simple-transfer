@@ -7,7 +7,7 @@ Code is the source of truth where it exists. This document specifies behaviour a
 | Shape | Defined in |
 |---|---|
 | Request/response DTOs | `packages/shared/src/contract.ts` |
-| Limits, defaults, layer resolution | `packages/shared/src/limits.ts` |
+| Limits, defaults, override resolution | `packages/shared/src/limits.ts` |
 | Error codes and statuses | `packages/shared/src/errors.ts` |
 | Tunables (chunk size, TTLs, max lengths, roles) | `packages/shared/src/constants.ts` |
 | Path validation | `packages/shared/src/paths.ts` |
@@ -33,14 +33,14 @@ src/index.ts ✓            boot: env → context → API + web → serve; start
 src/serve.ts ✓            HTTP edge over node:http (see "HTTP edge"), clientIp, blobLength, limitBytes
 src/app.ts ✓              Context, createContext, createApp (composes route plugins under /api)
 src/env.ts ✓  auth.ts ✓  errors.ts ✓  web.ts ✓  db/ ✓  plugins/auth.ts ✓
-src/plugins/rate-limit.ts rateLimit macro
+src/plugins/rate-limit.ts ✓  rateLimit macro
 src/storage/local.ts ✓    local-disk adapter;  storage.contract.ts ✓: reusable adapter test suite
-src/limits.ts             limitsFor(user), usedBytes(userId)
-src/transfers/service.ts  create, view access, append, finalize, delete, DTO mapping
-src/transfers/routes.ts   thin Elysia plugin over the service
-src/admin/routes.ts
-src/sweeper.ts
-test/harness.ts ✓         createTestApp(): in-memory DB, temp storage, `request`, `signIn`
+src/limits.ts ✓           limitsFor(db, user), usedBytes(db, userId)
+src/transfers/service.ts ✓  create, view access, append, finalize, delete, DTO mapping
+src/transfers/routes.ts ✓  thin Elysia plugin over the service
+src/admin/routes.ts ✓
+src/sweeper.ts ✓
+test/harness.ts ✓         createTestApp(): in-memory DB, temp storage, `request`, `fetchAs`, `listen`, `signIn`
 ```
 
 Routes stay thin: validate with contract schemas, call a service function taking `(ctx, …)`, return a DTO. Services throw the error classes in `errors.ts`. `Context` holds `storage: Storage`; tests give it a temp directory.
@@ -50,13 +50,13 @@ Routes stay thin: validate with contract schemas, call a service function taking
 - Better Auth, OIDC only, one provider with id `oidc` (`genericOAuth`). No passwords, no other sign-up path. Redirect URI: `${BASE_URL}/api/auth/callback/oidc`. The client starts it with `signIn()` in `apps/web/src/auth.ts`.
 - Every user who authenticates at the IdP is provisioned. The first user ever created gets role `admin`, all others `user` (`databaseHooks` in `auth.ts`). Roles are those of the Better Auth admin plugin.
 - User administration (list, set role, ban) uses the admin plugin's own endpoints through `authClient.admin.*`. There are no custom user routes. Users are banned, not deleted: `transfer.owner_id` is `ON DELETE RESTRICT` so blobs cannot be orphaned.
-- Route protection: `{ auth: true }` / `{ admin: true }` macros (`plugins/auth.ts`). Routes that are public but owner-aware read the session directly.
+- Route protection: `{ auth: true }` / `{ admin: true }` macros (`plugins/auth.ts`). Routes that are public but owner-aware use `{ viewer: true }`, which adds the session user if there is one.
 
 ## Limits
 
 `Limits` has four values, `null` meaning unlimited: `maxTransferBytes`, `quotaBytes`, `maxExpirySeconds`, `defaultExpirySeconds`. "Never expires" is simply `maxExpirySeconds: null`.
 
-All four are configurable per layer. Effective limits are `resolveLimits(global, role, user)` over the built-in `DEFAULT_LIMITS`; layers are rows of `limit_override`, each a partial object where an absent key inherits. `limitsFor(user)` loads the three rows that apply. Changing limits never affects existing transfers.
+The built-in `DEFAULT_LIMITS` are all `null`: until an admin sets limits there is no size limit, no quota, and transfers never expire. An admin sets **global limits** for everyone, and **overrides** for a role or a single user. All are rows of `limit_override` (`scope` `global`, `role` or `user`), each a partial object where an absent key inherits and `null` sets unlimited. Effective limits are `resolveLimits(global, role, user)`; `limitsFor(user)` loads the three rows that apply. The default expiry is clamped to the max expiry. Changing limits never affects existing transfers.
 
 `usedBytes(userId)` is `SUM(transfer.size)` over the user's existing transfers in either status: quota is reserved at creation and released on deletion or expiry.
 
@@ -68,6 +68,7 @@ All under `/api`. JSON unless noted. Errors are RFC 9457 problem documents with 
 
 | Method and path | Access | Body → response |
 |---|---|---|
+| `GET /config` | anyone | → `Config` |
 | `GET /me` | user | → `Me` |
 | `POST /transfers` | user, limit `create` | `TransferCreate` → `Transfer` |
 | `GET /transfers` | user | → `TransferSummary[]`, own, newest first |
@@ -79,7 +80,7 @@ All under `/api`. JSON unless noted. Errors are RFC 9457 problem documents with 
 | `GET /transfers/:id/files/:fileId` | view, limit `public` | → file bytes, `Range` supported |
 | `GET /transfers/:id/zip` | view, limit `public` | → streamed zip |
 | `GET /admin/transfers` | admin | → `AdminTransfer[]` |
-| `GET /admin/limits` | admin | → `AdminLimits` |
+| `GET /admin/limits` | admin | → `LimitOverride[]`, the global row included |
 | `PUT /admin/limits` | admin | `LimitOverride` → 204; empty `values` deletes the row |
 | `GET /admin/stats` | admin | → `AdminStats` |
 | `GET,POST /auth/*` | | Better Auth |
@@ -123,7 +124,7 @@ Offsets live only in storage. `Transfer.files[].offset` is `storage.size` while 
 ## Downloads
 
 - File: return `storage.read(key)` so Elysia serves `Range`. Headers: `Content-Type: application/octet-stream`, `Content-Disposition: attachment; filename*=UTF-8''<encoded basename>`, `X-Content-Type-Options: nosniff`. User content is never served inline.
-- Zip: `client-zip` `downloadZip` over `storage.read(key).stream()` per file, stored uncompressed, entry names are the file paths, `Content-Length` from `predictLength`. Streams with constant memory and supports Zip64. Name: `<title or "transfer">.zip`.
+- Zip: `client-zip` `downloadZip` over `storage.read(key)` per file, stored uncompressed, entry names are the file paths, `Content-Length` from `predictLength`. Streams with constant memory and supports Zip64. Name: `<title or "transfer">.zip`.
 - Every download carries `Content-Length`, so browsers show progress. This is why the app is served by `serve.ts` (below), not `Bun.serve`.
 - `downloads` increments once per zip request and once per file request that has no `Range` header.
 
@@ -171,10 +172,10 @@ When the Bun issue is fixed, `serve.ts` can go back to `Bun.serve` and lose thes
 | Path | Page | Access |
 |---|---|---|
 | `/` | Send: pick files or a folder, optional title, message, password, expiry; progress with pause and resume; resulting link | user |
-| `/login` | one sign-in button | |
+| `/login` | one sign-in button, labelled with `OIDC_PROVIDER_NAME` when set (from `GET /config`) | |
 | `/transfers` | own transfers: status, size, expiry, downloads, copy link, delete, resume incomplete | user |
 | `/t/:id` | download page: password prompt if locked, file tree, per-file and zip download | public |
-| `/admin` | limits (global, per role, per user), users, all transfers, stats | admin |
+| `/admin` | global limits, overrides per role and per user, users, all transfers, stats | admin |
 
 - Routes are defined once in `src/index.tsx` with `createRouter`; link with the typed `paths`. Unauthenticated users on a protected page go to `/login` and back.
 - Folders: `<input webkitdirectory>` and drag-and-drop directory entries; `path` is the relative path. The download page renders paths as a tree; the zip recreates the folders.
@@ -198,31 +199,31 @@ Write a test only where a mistake is plausible and would matter. Do not test fra
 
 **Unit tests (most tests).** Pure logic, no app, no network:
 - `shared`: `resolveLimits` ✓, `checkTransfer` boundaries, `normalizePath` rejections, `uploadTransfer` against a fake `fetch` (resume from offset, mismatch recovery, retry then give up, abort).
-- `server`: storage contract suite run against `local.ts` (append at wrong offset, concurrent appends, `remove` prefix isolation), rate-limit window arithmetic, sweeper selection, `clientIp`, and `serve` over real HTTP (streamed `Content-Length`, body cap, client address not spoofable).
+- `server`: storage contract suite run against `local.ts` (append at wrong offset, concurrent appends, `remove` prefix isolation), rate-limit window arithmetic, sweeper selection, `*_FILE` variables in `loadEnv`, `clientIp`, and `serve` over real HTTP (streamed `Content-Length`, body cap, client address not spoofable).
 - `web`: `t` interpolation and locale fallback. No component tests.
 
 **Integration tests (few).** Through `createTestApp().request`, real SQLite in memory and a temp storage directory. One per critical flow:
 - First user is admin ✓.
-- Create → upload with the real `uploadTransfer` → finalize → download a file and the zip byte-for-byte.
+- Create → upload with the real `uploadTransfer` → finalize → download a file, a range and the zip byte-for-byte over real HTTP (`listen()` in the harness), each with `Content-Length`.
 - An interrupted upload resumes and yields identical bytes.
-- Limits are enforced at creation for a user with layered overrides; quota frees on delete.
+- Limits are enforced at creation for a user with global limits and role and user overrides; quota frees on delete.
 - Password: locked without cookie, wrong password, unlocked after, owner bypass.
 - Expired and unfinished transfers are invisible, and swept with their blobs.
 - A non-owner cannot append, finalize or delete; an admin can delete.
 
 ## Deployment
 
-One image (`Dockerfile`): installs, builds the web app, runs `bun apps/server/src/index.ts`, which serves API and web on `PORT`. Migrations apply at startup. `compose.yaml` mounts `/data/db` and `/data/files` separately; set `DB_DIR` and `FILES_DIR` to host paths on whichever disks you want. TLS and large-body settings belong to the reverse proxy; it must allow request bodies of `CHUNK_BYTES` (16 MiB) and should not buffer responses.
+One image (`Dockerfile`): installs, builds the web app, runs `bun apps/server/src/index.ts`, which serves API and web on `PORT`. Migrations apply at startup. `compose.yaml` mounts `/data/db` and `/data/files` separately; set `DB_DIR` and `FILES_DIR` to host paths on whichever disks you want. Any variable can be supplied as `<NAME>_FILE`, a path whose contents are the value (for Docker secrets such as `OIDC_CLIENT_SECRET_FILE`); setting both is an error. TLS and large-body settings belong to the reverse proxy; it must allow request bodies of `CHUNK_BYTES` (16 MiB) and should not buffer responses.
 
 Development: `compose.dev.yaml` provides a mock OIDC provider; `bun run dev` starts the API on 3000 and Vite on 5173 with `/api` proxied, so the browser sees one origin and there is no CORS.
 
 ## Build order
 
-Each step ends with `bun run check` passing.
+Each step ends with `bun run check` passing. All steps are done (✓); step 6 was run with headless Chrome against the image and the mock provider.
 
 1. ✓ `shared`: `normalizePath`, `checkTransfer`, `uploadTransfer`, with unit tests.
 2. ✓ `server`: `storage/local.ts` + contract suite; add `storage` to `Context` and the harness.
-3. `server`: limits, transfers service and routes, sweeper, rate limiting; replace the placeholder `/me`.
-4. `server`: admin routes. Integration tests for steps 2–4.
-5. `web`: session bridge and route guard, then Send, Transfers, Download, Admin.
-6. Build the image and run the full flow against the mock provider.
+3. ✓ `server`: limits, transfers service and routes, sweeper, rate limiting; replace the placeholder `/me`.
+4. ✓ `server`: admin routes. Integration tests for steps 2–4.
+5. ✓ `web`: session bridge and route guard, then Send, Transfers, Download, Admin.
+6. ✓ Build the image and run the full flow against the mock provider.

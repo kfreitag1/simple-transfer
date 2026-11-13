@@ -9,13 +9,11 @@ import { CLIENT_IP_HEADER } from "./serve.ts";
 export type Auth = ReturnType<typeof createAuth>;
 export type User = Auth["$Infer"]["Session"]["user"];
 
-/**
- * OIDC is the only way in. The first user to sign in becomes admin; everyone after is a `user`.
- * With `test`, OIDC is replaced by Better Auth's test utilities (see `test/harness.ts`).
- */
+// OIDC only login. First user becomes admin
 export function createAuth(env: Env, db: Db, options: { test?: boolean } = {}) {
   return betterAuth({
     baseURL: env.baseUrl,
+    trustedOrigins: env.trustedOrigins,
     secret: env.authSecret,
     database: drizzleAdapter(db, { provider: "sqlite", schema }),
     rateLimit: { enabled: !options.test },
