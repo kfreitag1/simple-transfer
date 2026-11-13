@@ -10,6 +10,7 @@ Code is the source of truth where it exists. This document specifies behaviour a
 | Limits, defaults, layer resolution | `packages/shared/src/limits.ts` |
 | Error codes and statuses | `packages/shared/src/errors.ts` |
 | Tunables (chunk size, TTLs, max lengths, roles) | `packages/shared/src/constants.ts` |
+| Path validation | `packages/shared/src/paths.ts` |
 | Share ids and their word lists | `packages/shared/src/share-id.ts`, `words.ts` |
 | Tables | `apps/server/src/db/schema.ts` |
 | Storage port | `apps/server/src/storage/storage.ts` |
@@ -58,7 +59,7 @@ All four are configurable per layer. Effective limits are `resolveLimits(global,
 
 `usedBytes(userId)` is `SUM(transfer.size)` over the user's existing transfers in either status: quota is reserved at creation and released on deletion or expiry.
 
-Add `checkTransfer(input: TransferCreate, me: Me): ErrorCode | undefined` to `shared/limits.ts`. The web app calls it before submitting; the server calls it as the authority. It returns the first failure of: total size over `maxTransferBytes` → `transfer-too-large`; `usedBytes + total` over `quotaBytes` → `quota-exceeded`; `expiresIn` over `maxExpirySeconds`, or `null` when the max is not `null` → `expiry-too-long`.
+`checkTransfer(input, me)` in `shared/limits.ts` is shared by both sides: the web app calls it before submitting; the server calls it as the authority. It returns the first failure of: total size over `maxTransferBytes` → `transfer-too-large`; `usedBytes + total` over `quotaBytes` → `quota-exceeded`; `expiresIn` over `maxExpirySeconds`, or `null` when the max is not `null` → `expiry-too-long`.
 
 ## API
 
@@ -92,7 +93,7 @@ Owner-only routes answer `not-found`, not `forbidden`, to anyone else.
 
 **Unlock.** Verify with `Bun.password.verify`; failure is `password-invalid`. Success sets Elysia's signed cookie `unlock` (app config `cookie: { secrets: env.authSecret, sign: ["unlock"] }`): value the transfer id, `Path=/api/transfers/<id>`, `Max-Age=UNLOCK_TTL_SECONDS`, `HttpOnly`, `SameSite=Lax`, `Secure` when `BASE_URL` is https. A cookie with a bad signature makes Elysia answer `invalid-cookie`, which the client treats as `password-required`.
 
-**Create.** Normalize every path with `normalizePath` (add to `shared/paths.ts`, used by client and server): split on `/`, reject empty, `.` and `..` segments, backslashes, control characters, a leading `/`, and lengths over `MAX_PATH_LENGTH`. An invalid or duplicate path → `invalid-path`. Then `checkTransfer`. Insert the transfer and its files in one synchronous transaction that also reads `usedBytes`, so concurrent creates cannot exceed quota. `expiresAt` is fixed here: `now + (expiresIn ?? defaultExpirySeconds)`, or null.
+**Create.** Normalize every path with `normalizePath` (`shared/paths.ts`, used by client and server): split on `/`, reject empty, `.` and `..` segments, backslashes, control characters, a leading `/`, and lengths over `MAX_PATH_LENGTH`. An invalid or duplicate path → `invalid-path`. Then `checkTransfer`. Insert the transfer and its files in one synchronous transaction that also reads `usedBytes`, so concurrent creates cannot exceed quota. `expiresAt` is fixed here: `now + (expiresIn ?? defaultExpirySeconds)`, or null.
 
 The primary key is a share id, so a collision fails the insert: catch the unique-constraint error and retry the whole transaction with a fresh id (3 attempts, then let it become a 500).
 

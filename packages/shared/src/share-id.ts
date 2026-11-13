@@ -1,11 +1,9 @@
 import { SCENES, SUBJECTS, VERBS } from "./words.ts";
 
-export const SHARE_ID_WORDS = 3;
-export const SHARE_ID_SPACE = SCENES.length * SUBJECTS.length * VERBS.length;
-export const SHARE_ID_BITS = Math.log2(SHARE_ID_SPACE);
+export const SHARE_ID_BITS = Math.log2(SCENES.length * SUBJECTS.length * VERBS.length);
 
-/** Uniform integer in `[0, max)`, by rejection sampling so no value is favoured. */
-export function randomBelow(max: number): number {
+/** Uniform integer in `[0, max)`, by rejection sampling */
+function randomBelow(max: number): number {
   const limit = Math.floor(0x1_0000_0000 / max) * max;
   const value = new Uint32Array(1);
   do crypto.getRandomValues(value);
@@ -16,12 +14,12 @@ export function randomBelow(max: number): number {
 /**
  * A share id, e.g. `quiet-heron-drifts`. It is the share link, so it trades cryptographic
  * unguessability for being copyable and memorable; the mitigation is rate limiting plus short
- * expiries (`ARCHITECTURE.md`, "Share ids")
+ * expiries (`ARCHITECTURE.md`, "Rate limiting")
  *
  * Ids collide (birthday bound at `2 ** (SHARE_ID_BITS / 2)` transfers), so inserting a transfer
- * retries with a fresh id on a primary-key conflict. `random` is injectable for tests
+ * retries with a fresh id on a primary-key conflict
  */
-export function createShareId(random: (max: number) => number = randomBelow): string {
-  const pick = (list: readonly string[]) => list[random(list.length)]!;
+export function createShareId(): string {
+  const pick = (list: readonly string[]) => list[randomBelow(list.length)]!;
   return [pick(SCENES), pick(SUBJECTS), pick(VERBS)].join("-");
 }

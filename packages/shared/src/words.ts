@@ -1,8 +1,7 @@
 /**
- * Curated vocabulary for share ids (`share-id.ts`). Three lists, one word per slot, so an id reads
- * like a haiku line: `<scene>-<subject>-<verb>`, e.g. `quiet-heron-drifts`
+ * Vocab for share ids (`share-id.ts`). IDs are haikus: `<scene>-<subject>-<verb>`, e.g. `quiet-heron-drifts`
  *
- * These lists ARE the id space: their sizes decide how hard a share link is to guess.
+ * These lists ARE the id space: their sizes decide how hard a share link is to guess
  * Add words freely (they only make ids harder to guess), but keep every entry a
  * single lowercase ascii word of 3-12 letters, unique across all three lists
  */
@@ -57,7 +56,7 @@ adroit vernal estival autumnal hibernal nocturnal matutinal vespertine crepuscul
 `);
 
 export const SUBJECTS: readonly string[] = words(`
-oak birch alder ash aspen beech cedar elm fir hawthorn hazel hemlock holly hornbeam boonoo
+oak birch alder ash aspen beech cedar elm fir hawthorn hazel hemlock holly hornbeam boonoo boon boonoi bug bugnoo
 juniper larch laurel linden maple pear pine plane poplar rowan sequoia spruce sycamore
 walnut willow yew buckthorn crabapple tulip daffodil narcissus hyacinth crocus snowdrop bluebell
 foxglove lupin poppy peony iris lily lotus orchid aster cosmos dahlia zinnia
