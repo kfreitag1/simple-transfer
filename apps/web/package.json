@@ -1,0 +1,23 @@
+{
+  "name": "@st/web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@elysia/eden": "2.0.0-rc.1",
+    "@solidjs/router": "2.0.0-next.44",
+    "@solidjs/web": "2.0.0-rc.21",
+    "@st/shared": "workspace:*",
+    "better-auth": "1.7.20",
+    "solid-js": "2.0.0-rc.21"
+  },
+  "devDependencies": {
+    "@st/server": "workspace:*",
+    "vite": "8.3.7",
+    "vite-plugin-solid": "3.0.0-next.27"
+  }
+}

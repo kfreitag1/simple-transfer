@@ -1,0 +1,25 @@
+{
+  "name": "simple-transfer",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "bun run --filter '@st/*' dev",
+    "build": "bun run --filter @st/web build",
+    "start": "bun apps/server/src/index.ts",
+    "test": "bun test",
+    "typecheck": "bun run --filter '@st/*' typecheck",
+    "lint": "biome check",
+    "fix": "biome check --write",
+    "check": "bun run lint && bun run typecheck && bun test",
+    "db:generate": "bun run --filter @st/server db:generate"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.6",
+    "@types/bun": "1.4.4",
+    "typescript": "7.0.2"
+  }
+}

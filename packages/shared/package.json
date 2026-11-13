@@ -1,0 +1,14 @@
+{
+  "name": "@st/shared",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "typebox": "1.4.6"
+  }
+}
