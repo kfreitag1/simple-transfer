@@ -15,5 +15,6 @@ serve((request) => app.handle(request), {
   maxBodyBytes: CHUNK_BYTES + 1024,
 });
 startSweeper(ctx);
+ctx.updates.start();
 
 console.log(`simple-transfer listening on http://localhost:${env.port}`);

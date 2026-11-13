@@ -11,6 +11,7 @@ bun run check        # lint + typecheck + tests. Must pass before you finish.
 bun run fix          # apply Biome formatting and safe fixes
 bun test <path>      # one file
 bun run db:generate  # after editing apps/server/src/db/schema.ts; commit the migration
+# A release: bump the version in package.json, add its notes to CHANGELOG.md, tag vX.Y.Z.
 docker compose -f compose.dev.yaml up -d   # mock OIDC provider for manual sign-in
 ```
 
@@ -34,7 +35,7 @@ Do not upgrade or add dependencies without being asked. Prefer Bun built-ins (`B
 - **Dependency direction:** `web → shared ← server`. Shared is isomorphic: no Bun, Node or DOM APIs. Web imports only `type App` from server.
 - **Server:** routes are thin and validate with schemas from `@st/shared/contract`; logic lives in service functions taking `ctx`. State is reached only through `Context`: no module-level singletons, no `Bun.env` outside `env.ts`. Fail by throwing a class from `errors.ts`.
 - **A new error code** is added in `shared/errors.ts`, `server/errors.ts` and `web/src/i18n/locales/en.ts`; typecheck enforces the last.
-- **Web:** every user-facing string goes through `t()`; format with `Intl.*`; CSS modules with logical properties.
+- **Web:** every user-facing string goes through `t()`; format with `Intl.*`; CSS modules with logical properties. Build pages from `src/ui` and the tokens in `index.css` ("Design system" in `ARCHITECTURE.md`): no literal colours or sizes, no styling of raw form elements in pages, explanations behind a `Hint`.
 - **Simplicity:** no abstraction with a single use, no speculative options, no new files when an existing one fits. Comments only for what the code cannot say.
 - **Tests:** follow "Testing" in `ARCHITECTURE.md`. Mostly unit tests of pure logic, a few integration tests of critical flows, nothing for obvious behaviour.
 - Imports use explicit `.ts`/`.tsx` extensions. IDs come from the schema defaults. Timestamps cross the API as epoch milliseconds.
@@ -53,6 +54,7 @@ Solid 2
 - DOM APIs and JSX types come from `@solidjs/web`. `solid-js/web` and `solid-js/store` no longer exist.
 - `createEffect` takes `(compute, apply)`. Setters apply after a flush. Async is a memo returning a promise, read under `<Loading>`. Never destructure props.
 - The router is `createRouter({ routes })`, rendered as a component; there is no `<Route>` JSX.
+- A keyed `<Show>` needs a child function that takes a parameter; a memo passed to `refresh()` through context is typed `SourceAccessor`, not `Accessor`.
 - `better-auth/solid` is for Solid 1. Use `better-auth/client` and bridge `authClient.useSession` with `from()`.
 
 Better Auth

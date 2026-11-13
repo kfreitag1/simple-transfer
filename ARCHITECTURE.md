@@ -15,6 +15,7 @@ Code is the source of truth where it exists. This document specifies behaviour a
 | Tables | `apps/server/src/db/schema.ts` |
 | Storage port | `apps/server/src/storage/storage.ts` |
 | Configuration | `apps/server/src/env.ts`, `.env.example` |
+| Version and release notes | `package.json`, `CHANGELOG.md` |
 
 ## Layout
 
@@ -36,6 +37,9 @@ src/env.ts ✓  auth.ts ✓  errors.ts ✓  web.ts ✓  db/ ✓  plugins/auth.ts
 src/plugins/rate-limit.ts ✓  rateLimit macro
 src/storage/local.ts ✓    local-disk adapter;  storage.contract.ts ✓: reusable adapter test suite
 src/limits.ts ✓           limitsFor(db, user), usedBytes(db, userId)
+src/settings.ts ✓         getSettings, setSettings
+src/changelog.ts ✓        parseChangelog, readChangelog
+src/updates.ts ✓          readVersion, createUpdates: the GitHub release check
 src/transfers/service.ts ✓  create, view access, append, finalize, delete, DTO mapping
 src/transfers/routes.ts ✓  thin Elysia plugin over the service
 src/admin/routes.ts ✓
@@ -50,6 +54,7 @@ Routes stay thin: validate with contract schemas, call a service function taking
 - Better Auth, OIDC only, one provider with id `oidc` (`genericOAuth`). No passwords, no other sign-up path. Redirect URI: `${BASE_URL}/api/auth/callback/oidc`. The client starts it with `signIn()` in `apps/web/src/auth.ts`.
 - Every user who authenticates at the IdP is provisioned. The first user ever created gets role `admin`, all others `user` (`databaseHooks` in `auth.ts`). Roles are those of the Better Auth admin plugin.
 - User administration (list, set role, ban) uses the admin plugin's own endpoints through `authClient.admin.*`. There are no custom user routes. Users are banned, not deleted: `transfer.owner_id` is `ON DELETE RESTRICT` so blobs cannot be orphaned.
+- Better Auth checks the `Origin` of every auth write against `baseUrl`; `TRUSTED_ORIGINS` adds more. In development the page is served by Vite on another origin, so signing out needs it whenever `BASE_URL` points at the API.
 - Route protection: `{ auth: true }` / `{ admin: true }` macros (`plugins/auth.ts`). Routes that are public but owner-aware use `{ viewer: true }`, which adds the session user if there is one.
 
 ## Limits
@@ -61,6 +66,22 @@ The built-in `DEFAULT_LIMITS` are all `null`: until an admin sets limits there i
 `usedBytes(userId)` is `SUM(transfer.size)` over the user's existing transfers in either status: quota is reserved at creation and released on deletion or expiry.
 
 `checkTransfer(input, me)` in `shared/limits.ts` is shared by both sides: the web app calls it before submitting; the server calls it as the authority. It returns the first failure of: total size over `maxTransferBytes` → `transfer-too-large`; `usedBytes + total` over `quotaBytes` → `quota-exceeded`; `expiresIn` over `maxExpirySeconds`, or `null` when the max is not `null` → `expiry-too-long`.
+
+## Instance settings
+
+An admin can give the instance a name, an accent colour and a logo (`Branding` in the contract); each is `null` until set, which keeps the built-in look. The same row (`settings`, one row with id 1) holds `updateCheck`. Both are written whole by `PUT /admin/settings` — a partial write would reset what it left out — and read by everyone through `GET /config`, the admin UI included.
+
+The logo is stored and served as a data URL (at most `MAX_LOGO_BYTES` of image), so it needs no route, no cache rules and no blob, and an SVG cannot run script because it is only ever an `<img>` source. The web app applies branding in `Layout.tsx`: document title, favicon, and the `--brand` CSS variable from which `index.css` derives the accent for both themes.
+
+## Version and updates
+
+The version lives in the root `package.json` and nowhere else. `CHANGELOG.md` (Keep a Changelog, Semantic Versioning) is written by hand per release; both files ship inside the image.
+
+- `GET /admin/releases` (admin only: only admins need to know) returns the running version, the release notes parsed out of `CHANGELOG.md` (`src/changelog.ts`), and `update`, the newer release when one is known and the check is on.
+- `src/updates.ts` asks GitHub for the latest release a few times a day (`AbortSignal.timeout`, failures silent), compares it with the running version using `Bun.semver.order`, and keeps the answer in memory. Nothing but the request leaves the instance: no identifier, no usage. `updateCheck` in the settings row turns it off.
+- The admin panel has a Releases tab listing every release newest first, the running version, and a link to the newer release; a dot on the tab label says one is waiting, and the same tab holds the `updateCheck` toggle. Nothing about releases appears anywhere else in the app.
+
+**Cutting a release:** add the entries under a new `## [x.y.z]` heading in `CHANGELOG.md`, set the same version in `package.json`, commit, tag `vx.y.z` and publish a GitHub release. The image reports the version it was built with.
 
 ## API
 
@@ -83,6 +104,8 @@ All under `/api`. JSON unless noted. Errors are RFC 9457 problem documents with 
 | `GET /admin/limits` | admin | → `LimitOverride[]`, the global row included |
 | `PUT /admin/limits` | admin | `LimitOverride` → 204; empty `values` deletes the row |
 | `GET /admin/stats` | admin | → `AdminStats` |
+| `GET /admin/releases` | admin | → `Releases`: the running version, the release notes from `CHANGELOG.md`, and a newer release if known |
+| `PUT /admin/settings` | admin | `Settings` → 204; replaces all of it |
 | `GET,POST /auth/*` | | Better Auth |
 
 **View access**, one function used by the three `view` routes, evaluated in order:
@@ -91,7 +114,7 @@ All under `/api`. JSON unless noted. Errors are RFC 9457 problem documents with 
 3. Status is `uploading` → `not-found`.
 4. Transfer has a password and the request has no valid unlock cookie → `password-required`.
 
-Owner-only routes answer `not-found`, not `forbidden`, to anyone else.
+Owner-only routes answer `not-found`, not `forbidden`, to anyone else. `Transfer.owned` tells the requester whether they own it, which is what lets the web app offer the upload, the link and the download count to owners only.
 
 **Unlock.** Verify with `Bun.password.verify`; failure is `password-invalid`. Success sets Elysia's signed cookie `unlock` (app config `cookie: { secrets: env.authSecret, sign: ["unlock"] }`): value the transfer id, `Path=/api/transfers/<id>`, `Max-Age=UNLOCK_TTL_SECONDS`, `HttpOnly`, `SameSite=Lax`, `Secure` when `BASE_URL` is https. A cookie with a bad signature makes Elysia answer `invalid-cookie`, which the client treats as `password-required`.
 
@@ -171,17 +194,30 @@ When the Bun issue is fixed, `serve.ts` can go back to `Bun.serve` and lose thes
 
 | Path | Page | Access |
 |---|---|---|
-| `/` | Send: pick files or a folder, optional title, message, password, expiry; progress with pause and resume; resulting link | user |
+| `/` | Send: drop or pick files and folders (the whole window is a drop target; pasted files are accepted), then title, message, and password and expiry under "Options". Submitting creates the transfer, starts its upload and opens `/t/:id` | user |
 | `/login` | one sign-in button, labelled with `OIDC_PROVIDER_NAME` when set (from `GET /config`) | |
-| `/transfers` | own transfers: status, size, expiry, downloads, copy link, delete, resume incomplete | user |
-| `/t/:id` | download page: password prompt if locked, file tree, per-file and zip download | public |
-| `/admin` | global limits, overrides per role and per user, users, all transfers, stats | admin |
+| `/transfers` | own transfers: files, size, downloads, expiry, copy link, delete. Every row opens the transfer | user |
+| `/t/:id` | the transfer page. Ready: password prompt if locked, file tree, per-file download and everything as a zip (a lone file downloads as itself); the owner also gets the link, and the download count. Still uploading: the owner's upload — its progress if this browser is running it, otherwise the files that still need choosing. Signed-out visitors see the brand and nothing else of the app | public |
+| `/admin` | stats, and one tab each (`?tab=`) for users, all transfers, limits (global and overrides per role and per user) and branding | admin |
 
 - Routes are defined once in `src/index.tsx` with `createRouter`; link with the typed `paths`. Unauthenticated users on a protected page go to `/login` and back.
 - Folders: `<input webkitdirectory>` and drag-and-drop directory entries; `path` is the relative path. The download page renders paths as a tree; the zip recreates the folders.
+- **One page per transfer, and uploads outlive it.** `/t/:id` is the transfer's page in every state, so nothing has a second address. Every upload lives in `src/uploads.ts`, created in `Layout` above the routes, so changing pages never interrupts one and the chosen blobs stay in memory for resume. The page shows the live upload when this browser has it, and otherwise the server's copy: for an incomplete transfer that is the files which still lack bytes (finished ones are never asked for again), how many of them are matched, and a "Resume" that stays disabled until all of them have been added, matched by path and size. Uploads are keyed by id, so several can run at once and each page shows only its own. `UploadIndicator` lists every upload still in flight, one row each, on any page; a row opens that transfer's page. Uploads are not pausable: a stalled one offers Resume (the blobs are still in memory), and one that finishes while the user is elsewhere says so in a toast.
 - Server data: async memos over `api.*` under `<Loading>`; mutations then `refresh`. No client-side store library.
 - Downloads are plain `<a href>` links to the API so the browser streams them.
-- Styling: CSS modules beside components, tokens as CSS variables in `src/index.css`, `light-dark()` for themes, logical properties (`margin-inline`, not `margin-left`) so RTL locales work. No UI library.
+
+### Design system
+
+Bespoke and small; no UI library. The aim is an interface that goes unnoticed: neutral colours, one accent, system fonts, and explanation kept behind a `Hint` or tooltip rather than printed on the page.
+
+- **Tokens** are CSS variables in `src/index.css`: colour, space, type, radius, shadow, motion. Nothing else contains a literal colour, size or duration. Themes use `light-dark()`; the user's choice of system, light or dark (`src/theme.ts`, in the account menu) sets `color-scheme` through `data-theme` on the root. The accent derives from `--brand` (see "Branding") with its lightness clamped per theme.
+- **`src/ui/`** holds the generic controls, each with its CSS module, knowing nothing of transfers: `Icon`, `Button` / `LinkButton` / `IconButton`, `Input` / `Textarea` / `Select` / `Segmented` / `Field`, `Tooltip` / `Hint`, `Dialog` with `confirmAction` and `toast` (`overlays.tsx`), and `Panel` / `Page` / `Empty` (`surfaces.tsx`). Pages compose these and do not style raw form elements themselves.
+- **`src/components.tsx`** holds what is specific to this app and shared by pages: `FileRow`, `TransferMeta`, `Expiry`, `CopyButton`, `ErrorText`.
+- **Two layouts:** `Panel`, a narrow card for one focused task (login, send, download), and `Page`, a wide one for lists and settings. A flow renders a new `Panel` per step, which gives the step transition.
+- **Icons** are Iconoir SVGs imported individually into the registry in `ui/Icon.tsx`, so only the ones used are bundled. Counts are shown as an icon and a number (`Stat`), which is also why they need no plural forms.
+- **Platform first:** popovers and CSS anchor positioning for tooltips and the menu, `<dialog>` for modals, `<details>` for disclosure, `@starting-style` for entry transitions. The build target is `esnext`; there are no fallbacks for older browsers.
+- **Feedback:** failures of a form appear in the form (`ErrorText`); results and failures of one-off actions are toasts; destructive actions ask first through `confirmAction`.
+- Logical properties throughout (`margin-inline`, not `margin-left`) so RTL locales work.
 
 ### i18n
 
@@ -189,7 +225,7 @@ When the Bun issue is fixed, `serve.ts` can go back to `Bun.serve` and lose thes
 - Adding a language is adding `locales/<code>.ts` with `export default { … } satisfies Dict`. It is discovered and lazy-loaded automatically, and a missing key fails typecheck.
 - The server sends no prose. API errors are shown as `t("errors.<code>")`; `en.ts` must cover every `ErrorCode`.
 - Sizes, dates, durations and numbers are formatted with `Intl.*` using `locale()`. Put formatters in `src/i18n/format.ts`.
-- Phrase strings so they need no plural forms (`Files: {count}`).
+- Phrase strings so they need no plural forms: show a count as a `Stat`, or as `Files: {count}`.
 
 ## Testing
 

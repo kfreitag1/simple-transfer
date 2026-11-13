@@ -4,11 +4,11 @@ import type { Transfer, TransferCreate } from "@st/shared/contract";
 import { uploadTransfer } from "@st/shared/upload";
 import { downloadZip } from "client-zip";
 import { eq } from "drizzle-orm";
-import { limitOverride, transfer as transferTable } from "../src/db/schema.ts";
+import { transfer as transferTable } from "../src/db/schema.ts";
 import { sweep } from "../src/sweeper.ts";
 import { createTestApp } from "./harness.ts";
 
-/** Deterministic pseudo-random bytes, so a misplaced chunk cannot go unnoticed. */
+/** Deterministic pseudo-random bytes, so a misplaced chunk cannot go unnoticed */
 function bytes(size: number, seed = 1): Uint8Array<ArrayBuffer> {
   const out = new Uint8Array(size);
   let x = seed;
@@ -86,12 +86,12 @@ test("an interrupted upload resumes from the stored offsets and yields identical
   const created: Transfer = await body(create({ files: [{ path: "a", size: data.length }] }));
   const blobs = new Map([["a", new Blob([data])]]);
   const controller = new AbortController();
-  const paused = await uploadTransfer(created, blobs, {
+  const interrupted = await uploadTransfer(created, blobs, {
     fetch: fetchAs(owner.headers),
     signal: controller.signal,
-    onProgress: (p) => p.uploadedBytes > 0 && controller.abort("pause"),
+    onProgress: (p) => p.uploadedBytes > 0 && controller.abort("interrupted"),
   }).catch((e) => e);
-  expect(paused).toBe("pause");
+  expect(interrupted).toBe("interrupted");
 
   const resumed: Transfer = await body(request(`/api/transfers/${created.id}`, { headers: owner.headers }));
   expect(resumed.files[0]!.offset).toBe(CHUNK_BYTES);
@@ -100,18 +100,22 @@ test("an interrupted upload resumes from the stored offsets and yields identical
   expect(new Uint8Array(await download.arrayBuffer())).toEqual(data);
 });
 
-test("layered limits are enforced at creation, and deleting a transfer frees its quota", async () => {
-  const { ctx, request, create, signIn } = await setup();
+test("global limits and overrides set by an admin are enforced at creation, and deleting a transfer frees its quota", async () => {
+  const { request, create, signIn, owner } = await setup();
   const member = await signIn();
   const MB = 1_000_000;
-  ctx.db
-    .insert(limitOverride)
-    .values([
-      { scope: "global", subject: "", values: { quotaBytes: 10 * MB, maxTransferBytes: 1 * MB } },
-      { scope: "role", subject: "user", values: { maxTransferBytes: 6 * MB, maxExpirySeconds: 3600 } },
-      { scope: "user", subject: member.user.id, values: { quotaBytes: 8 * MB } },
-    ])
-    .run();
+  const put = (values: object, scope = "global", subject = "") =>
+    request("/api/admin/limits", json({ scope, subject, values }, owner.headers, "PUT"));
+  expect(
+    (await request("/api/admin/limits", json({ scope: "global", subject: "", values: {} }, member.headers, "PUT")))
+      .status,
+  ).toBe(403);
+  await put({ quotaBytes: 10 * MB, maxTransferBytes: 1 * MB });
+  await put({ maxTransferBytes: 6 * MB, maxExpirySeconds: 3600 }, "role", "user");
+  await put({ quotaBytes: 8 * MB }, "user", member.user.id);
+  await put({ maxTransferBytes: 1 }, "user", "someone-else");
+  await put({}, "user", "someone-else");
+  expect(await body(request("/api/admin/limits", { headers: owner.headers }))).toHaveLength(3);
   const code = async (size: number, extra: Partial<TransferCreate> = {}) =>
     (await body(create({ files: [{ path: "a", size }], ...extra }, member.headers))).code;
 
