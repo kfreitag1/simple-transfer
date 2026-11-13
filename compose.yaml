@@ -1,6 +1,8 @@
 services:
   app:
-    build: .
+    # Published for amd64 and arm64; see .github/workflows/release.yml
+    image: ghcr.io/kfreitag1/simple-transfer:latest
+    # build: . # uncomment to run from this checkout instead
     restart: unless-stopped
     ports: ["3000:3000"]
     env_file: .env
@@ -8,6 +10,6 @@ services:
       DB_PATH: /data/db/app.sqlite
       STORAGE_DIR: /data/files
     volumes:
-      # Two independent mounts: point each at whichever host disk suits it.
+      # Two independent mounts: point each at whichever host disk suits it
       - ${DB_DIR:-./data/db}:/data/db # SQLite database: small, wants a reliable disk
       - ${FILES_DIR:-./data/files}:/data/files # uploaded blobs: large

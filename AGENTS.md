@@ -11,7 +11,8 @@ bun run check        # lint + typecheck + tests. Must pass before you finish.
 bun run fix          # apply Biome formatting and safe fixes
 bun test <path>      # one file
 bun run db:generate  # after editing apps/server/src/db/schema.ts; commit the migration
-# A release: bump the version in package.json, add its notes to CHANGELOG.md, tag vX.Y.Z.
+# A release: bump the version in package.json, add its notes to CHANGELOG.md, tag vX.Y.Z and push the
+# tag; release.yml publishes the image (ghcr.io) and a GitHub release from the changelog
 docker compose -f compose.dev.yaml up -d   # mock OIDC provider for manual sign-in
 ```
 

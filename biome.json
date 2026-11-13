@@ -2,7 +2,36 @@
   "$schema": "https://biomejs.dev/schemas/2.6.6/schema.json",
   "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
   "files": { "includes": ["**", "!**/migrations", "!**/*.md"] },
-  "formatter": { "indentStyle": "space", "lineWidth": 120 },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 120,
+    "lineEnding": "lf",
+    "trailingNewline": true,
+    "attributePosition": "auto",
+    "formatWithErrors": false,
+    "useEditorconfig": false
+  },
+  "javascript": {
+    "formatter": {
+      "enabled": true,
+      "expand": "auto",
+      "bracketSpacing": true,
+      "bracketSameLine": false,
+      "delimiterSpacing": false,
+      "quoteStyle": "double",
+      "jsxQuoteStyle": "double",
+      "quoteProperties": "asNeeded",
+      "semicolons": "always",
+      "trailingCommas": "all",
+      "arrowParentheses": "always",
+      "operatorLinebreak": "after"
+    }
+  },
+  "json": { "formatter": { "enabled": true, "bracketSpacing": true, "trailingCommas": "none" } },
+  "css": { "formatter": { "enabled": true, "quoteStyle": "double", "indentWidth": 2 } },
+  "yaml": { "formatter": { "enabled": true, "bracketSpacing": false } },
   "linter": { "rules": { "preset": "recommended", "style": { "noNonNullAssertion": "off" } } },
   "assist": { "actions": { "source": { "organizeImports": "on" } } }
 }

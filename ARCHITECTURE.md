@@ -81,7 +81,7 @@ The version lives in the root `package.json` and nowhere else. `CHANGELOG.md` (K
 - `src/updates.ts` asks GitHub for the latest release a few times a day (`AbortSignal.timeout`, failures silent), compares it with the running version using `Bun.semver.order`, and keeps the answer in memory. Nothing but the request leaves the instance: no identifier, no usage. `updateCheck` in the settings row turns it off.
 - The admin panel has a Releases tab listing every release newest first, the running version, and a link to the newer release; a dot on the tab label says one is waiting, and the same tab holds the `updateCheck` toggle. Nothing about releases appears anywhere else in the app.
 
-**Cutting a release:** add the entries under a new `## [x.y.z]` heading in `CHANGELOG.md`, set the same version in `package.json`, commit, tag `vx.y.z` and publish a GitHub release. The image reports the version it was built with.
+**Cutting a release:** add the entries under a new `## [x.y.z]` heading in `CHANGELOG.md`, set the same version in `package.json`, commit, then tag `vx.y.z` and push the tag. The release workflow publishes the image and a GitHub release from that section; the image reports the version it was built with.
 
 ## API
 
@@ -194,15 +194,15 @@ When the Bun issue is fixed, `serve.ts` can go back to `Bun.serve` and lose thes
 
 | Path | Page | Access |
 |---|---|---|
-| `/` | Send: drop or pick files and folders (the whole window is a drop target; pasted files are accepted), then title, message, and password and expiry under "Options". Submitting creates the transfer, starts its upload and opens `/t/:id` | user |
+| `/` | Send: drop or pick files and folders (the whole window is a drop target; pasted files are accepted), then title, message, and password and expiry under "Options". Submitting creates the transfer, starts its upload and opens `/:id` | user |
 | `/login` | one sign-in button, labelled with `OIDC_PROVIDER_NAME` when set (from `GET /config`) | |
 | `/transfers` | own transfers: files, size, downloads, expiry, copy link, delete. Every row opens the transfer | user |
-| `/t/:id` | the transfer page. Ready: password prompt if locked, file tree, per-file download and everything as a zip (a lone file downloads as itself); the owner also gets the link, and the download count. Still uploading: the owner's upload — its progress if this browser is running it, otherwise the files that still need choosing. Signed-out visitors see the brand and nothing else of the app | public |
+| `/:id` | the transfer page, at the root: three hyphenated words cannot collide with a page of the app's own. Ready: password prompt if locked, file tree, per-file download and everything as a zip (a lone file downloads as itself); the owner also gets the link, and the download count. Still uploading: the owner's upload — its progress if this browser is running it, otherwise the files that still need choosing. Signed-out visitors see the brand and nothing else of the app | public |
 | `/admin` | stats, and one tab each (`?tab=`) for users, all transfers, limits (global and overrides per role and per user) and branding | admin |
 
 - Routes are defined once in `src/index.tsx` with `createRouter`; link with the typed `paths`. Unauthenticated users on a protected page go to `/login` and back.
 - Folders: `<input webkitdirectory>` and drag-and-drop directory entries; `path` is the relative path. The download page renders paths as a tree; the zip recreates the folders.
-- **One page per transfer, and uploads outlive it.** `/t/:id` is the transfer's page in every state, so nothing has a second address. Every upload lives in `src/uploads.ts`, created in `Layout` above the routes, so changing pages never interrupts one and the chosen blobs stay in memory for resume. The page shows the live upload when this browser has it, and otherwise the server's copy: for an incomplete transfer that is the files which still lack bytes (finished ones are never asked for again), how many of them are matched, and a "Resume" that stays disabled until all of them have been added, matched by path and size. Uploads are keyed by id, so several can run at once and each page shows only its own. `UploadIndicator` lists every upload still in flight, one row each, on any page; a row opens that transfer's page. Uploads are not pausable: a stalled one offers Resume (the blobs are still in memory), and one that finishes while the user is elsewhere says so in a toast.
+- **One page per transfer, and uploads outlive it.** `/:id` is the transfer's page in every state, so nothing has a second address. Every upload lives in `src/uploads.ts`, created in `Layout` above the routes, so changing pages never interrupts one and the chosen blobs stay in memory for resume. The page shows the live upload when this browser has it, and otherwise the server's copy: for an incomplete transfer that is the files which still lack bytes (finished ones are never asked for again), how many of them are matched, and a "Resume" that stays disabled until all of them have been added, matched by path and size. Uploads are keyed by id, so several can run at once and each page shows only its own. `UploadIndicator` lists every upload still in flight, one row each, on any page; a row opens that transfer's page. Uploads are not pausable: a stalled one offers Resume (the blobs are still in memory), and one that finishes while the user is elsewhere says so in a toast.
 - Server data: async memos over `api.*` under `<Loading>`; mutations then `refresh`. No client-side store library.
 - Downloads are plain `<a href>` links to the API so the browser streams them.
 
@@ -249,7 +249,13 @@ Write a test only where a mistake is plausible and would matter. Do not test fra
 
 ## Deployment
 
-One image (`Dockerfile`): installs, builds the web app, runs `bun apps/server/src/index.ts`, which serves API and web on `PORT`. Migrations apply at startup. `compose.yaml` mounts `/data/db` and `/data/files` separately; set `DB_DIR` and `FILES_DIR` to host paths on whichever disks you want. Any variable can be supplied as `<NAME>_FILE`, a path whose contents are the value (for Docker secrets such as `OIDC_CLIENT_SECRET_FILE`); setting both is an error. TLS and large-body settings belong to the reverse proxy; it must allow request bodies of `CHUNK_BYTES` (16 MiB) and should not buffer responses.
+One image (`Dockerfile`): installs, builds the web app, runs `bun apps/server/src/index.ts`, which serves API and web on `PORT`, and answers a `HEALTHCHECK` on `/api/health`.
+
+Images are published to `ghcr.io/kfreitag1/simple-transfer` for `linux/amd64` and `linux/arm64`, so `compose.yaml` pulls rather than builds (it has a commented `build:` for running from a checkout). CI and the release pipeline are GitHub Actions and need no secrets: GHCR uses `GITHUB_TOKEN`.
+
+- `ci.yml` runs on every pull request and push to `main`: `bun run check` (lint, typecheck, tests), `bun run build`, and a Docker build with layer caching. Nothing is pushed.
+- `release.yml` runs on a `v*` tag. It refuses a tag that does not match `package.json`, then pushes the image tagged `X.Y.Z`, `X.Y` and — for a final release — `latest`, and afterwards publishes a GitHub release whose notes are that version's `CHANGELOG.md` section (a version without notes fails the job). Pre-release tags (with a `-`) skip `latest` and are marked as pre-releases.
+- The runtime is pinned once, in the Dockerfile's `ARG BUN_VERSION`; CI reads that value rather than keeping a copy, so the checks run on the Bun the image ships. Migrations apply at startup. `compose.yaml` mounts `/data/db` and `/data/files` separately; set `DB_DIR` and `FILES_DIR` to host paths on whichever disks you want. Any variable can be supplied as `<NAME>_FILE`, a path whose contents are the value (for Docker secrets such as `OIDC_CLIENT_SECRET_FILE`); setting both is an error. TLS and large-body settings belong to the reverse proxy; it must allow request bodies of `CHUNK_BYTES` (16 MiB) and should not buffer responses.
 
 Development: `compose.dev.yaml` provides a mock OIDC provider; `bun run dev` starts the API on 3000 and Vite on 5173 with `/api` proxied, so the browser sees one origin and there is no CORS.
 

@@ -1,4 +1,4 @@
-# Throwaway OIDC provider for local development: any username signs in.
+# Throwaway OIDC provider for local development: any username signs in
 services:
   oidc:
     image: ghcr.io/navikt/mock-oauth2-server:2.1.10
