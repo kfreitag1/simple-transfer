@@ -1,0 +1,38 @@
+.list {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding-block: var(--space-3);
+  padding-inline: var(--space-4) var(--space-3);
+}
+
+.item + .item {
+  border-block-start: 1px solid var(--border);
+}
+
+.main {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-inline-size: 0;
+  text-decoration: none;
+}
+
+.title {
+  font-weight: 500;
+}
+
+.main:hover .title {
+  text-decoration: underline;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+}
