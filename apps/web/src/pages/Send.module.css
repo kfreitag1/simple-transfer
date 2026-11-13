@@ -1,0 +1,50 @@
+.files {
+  display: grid;
+  max-block-size: 14.5rem;
+  margin-inline: calc(var(--space-2) * -1);
+  overflow-y: auto;
+}
+
+.summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-block-start: var(--space-2);
+  padding-block-start: var(--space-2);
+  border-block-start: 1px solid var(--border);
+}
+
+.options {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.options summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-block-size: var(--control);
+  padding-inline: var(--space-3);
+  border-radius: inherit;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.chosen {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-inline-start: auto;
+  font-weight: 400;
+}
+
+.columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: var(--space-3);
+  padding: var(--space-3);
+  padding-block-start: var(--space-1);
+}
