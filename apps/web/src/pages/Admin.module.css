@@ -1,0 +1,233 @@
+.stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-5);
+}
+
+.stats div {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.stats dt {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.stats dd {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.tabs {
+  display: flex;
+  gap: var(--space-5);
+  overflow-x: auto;
+  border-block-end: 1px solid var(--border);
+}
+
+.tabs a {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding-block: var(--space-2);
+  color: var(--muted);
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color var(--fast);
+}
+
+.tabs a:hover {
+  color: var(--fg);
+}
+
+.tabs a[aria-current="page"] {
+  box-shadow: inset 0 -2px var(--fg);
+  color: var(--fg);
+}
+
+.sections {
+  display: grid;
+  gap: var(--space-6);
+}
+
+.sectionHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.sectionHeader h2 {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.banned {
+  color: var(--muted);
+}
+
+/* A cell that holds controls: as narrow as its content, which sits at the end */
+.controls {
+  inline-size: 1%;
+  white-space: nowrap;
+}
+
+.controls > div {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.role {
+  inline-size: 9rem;
+}
+
+.columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: var(--space-3);
+}
+
+.limits {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 21rem), 1fr));
+  gap: var(--space-4) var(--space-5);
+}
+
+.limit {
+  display: grid;
+  grid-template-columns: auto 6.5rem;
+  align-items: center;
+  justify-content: start;
+  gap: var(--space-1) var(--space-2);
+}
+
+.limit > span:first-child {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.formActions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.formActions:has(> :nth-child(2)) {
+  justify-content: flex-end;
+}
+
+.branding {
+  max-inline-size: 24rem;
+}
+
+.swatch {
+  inline-size: var(--control);
+  block-size: var(--control);
+  padding: 3px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.swatch::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.swatch::-webkit-color-swatch {
+  border: 0;
+  border-radius: var(--radius-sm);
+}
+
+.swatch::-moz-color-swatch {
+  border: 0;
+  border-radius: var(--radius-sm);
+}
+
+.logo {
+  display: grid;
+  place-items: center;
+  min-inline-size: var(--control);
+  block-size: var(--control);
+  padding-inline: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+}
+
+.logo img {
+  block-size: 1.5rem;
+  max-inline-size: 8rem;
+  object-fit: contain;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.check input {
+  inline-size: 1rem;
+  block-size: 1rem;
+}
+
+/* A release exists that this build does not have */
+.dot {
+  display: block;
+  flex: none;
+  inline-size: 5px;
+  block-size: 5px;
+  border-radius: 50%;
+  background: var(--notice);
+}
+
+/* Release notes */
+
+.releaseHead {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-1);
+  padding-block-end: var(--space-4);
+  border-block-end: 1px solid var(--border);
+}
+
+.update {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.releases {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.release {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.release h2 {
+  font-variant-numeric: tabular-nums;
+}
+
+.release h3 {
+  margin: 0 0 var(--space-1);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.release ul {
+  display: grid;
+  gap: var(--space-1);
+  padding-inline-start: 1.1em;
+  list-style: disc;
+}
