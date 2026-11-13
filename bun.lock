@@ -35,6 +35,7 @@
         "@solidjs/web": "2.0.0-rc.21",
         "@st/shared": "workspace:*",
         "better-auth": "1.7.20",
+        "iconoir": "7.12.2",
         "solid-js": "2.0.0-rc.21",
       },
       "devDependencies": {
@@ -318,6 +319,8 @@
     "fsevents": ["fsevents@2.3.3", "", { "os": "darwin" }, "sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw=="],
 
     "get-tsconfig": ["get-tsconfig@4.14.3", "", { "dependencies": { "resolve-pkg-maps": "^1.0.0" } }, "sha512-++QEw4DIY7WGoukz+/+A/8dGYPT9l9yIadnmSgZ8Rjr3YVSVDipQSO9CdnJo9ePqFqUUqh+wk9uIaoiAwsiPkA=="],
+
+    "iconoir": ["iconoir@7.12.2", "", {}, "sha512-epJjWmNUn0zddyShKgYPlE8m8cqwNLR5Zr2UmIHV1iZJr7uYGHDi/7dM4brOjLBXRP8lx0Q8N1gcWadizQgEMQ=="],
 
     "is-what": ["is-what@4.1.16", "", {}, "sha512-ZhMwEosbFJkA0YhFnNDgTM4ZxDRsS6HqTo7qsZM08fehyRYIYa0yHu5R6mgo1n/8MgaPBXiPimPD77baVFYg+A=="],
 

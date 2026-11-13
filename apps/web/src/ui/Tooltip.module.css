@@ -1,0 +1,46 @@
+.anchor {
+  display: inline-flex;
+  min-inline-size: 0;
+}
+
+.tooltip {
+  position: fixed;
+  inset: auto;
+  position-area: block-start;
+  position-try-fallbacks: flip-block;
+  inline-size: max-content;
+  max-inline-size: 17rem;
+  margin: var(--space-2);
+  padding-block: var(--space-1);
+  padding-inline: var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--fg);
+  color: var(--bg);
+  font-size: var(--text-sm);
+  font-weight: 400;
+  line-height: 1.4;
+  text-align: center;
+  white-space: normal;
+  user-select: none;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--fast);
+}
+
+.tooltip:popover-open {
+  opacity: 1;
+}
+
+@starting-style {
+  .tooltip:popover-open {
+    opacity: 0;
+  }
+}
+
+.hinted {
+  text-decoration: underline dotted var(--border-strong);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 0.125em;
+  cursor: help;
+}

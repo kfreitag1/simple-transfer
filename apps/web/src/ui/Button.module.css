@@ -1,0 +1,88 @@
+.button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-block-size: var(--control);
+  padding-block: 0;
+  padding-inline: var(--space-4);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: none;
+  font-weight: 500;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--fast),
+    border-color var(--fast),
+    color var(--fast),
+    scale var(--fast);
+}
+
+.button:active:not(:disabled) {
+  scale: 0.98;
+}
+
+.button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.primary {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.primary:hover:not(:disabled) {
+  background: color-mix(in oklch, var(--accent) 86%, var(--bg));
+}
+
+.secondary {
+  border-color: var(--border-strong);
+  background: var(--surface);
+}
+
+.secondary:hover:not(:disabled) {
+  background: var(--sunken);
+}
+
+.ghost {
+  color: var(--muted);
+}
+
+.ghost:hover:not(:disabled) {
+  background: var(--sunken);
+  color: var(--fg);
+}
+
+.danger {
+  background: var(--danger);
+  color: var(--on-accent);
+}
+
+.danger:hover:not(:disabled) {
+  background: color-mix(in oklch, var(--danger) 86%, var(--bg));
+}
+
+.small {
+  min-block-size: var(--control-sm);
+  padding-inline: var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+}
+
+.block {
+  inline-size: 100%;
+}
+
+.iconOnly {
+  inline-size: var(--control);
+  padding-inline: 0;
+}
+
+.iconOnly.small {
+  inline-size: var(--control-sm);
+}

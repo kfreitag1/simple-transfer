@@ -1,17 +1,246 @@
+/*
+ * Design tokens and element defaults
+ */
 :root {
   color-scheme: light dark;
-  --bg: light-dark(#fff, #111);
-  --fg: light-dark(#111, #eee);
-  --muted: light-dark(#666, #999);
-  --accent: light-dark(#2456e6, #7aa2ff);
-  --danger: light-dark(#c62828, #ff8a80);
-  --radius: 8px;
-  --gap: 1rem;
-  font-family: system-ui, sans-serif;
+
+  /* Colour */
+  --bg: light-dark(#f7f7f6, #0f0f10);
+  --surface: light-dark(#fff, #18181a);
+  --sunken: light-dark(#efefed, #242427);
+  --border: light-dark(#e4e4e1, #2b2b2f);
+  --border-strong: light-dark(#cdcdc9, #45454a);
+  --fg: light-dark(#1a1a19, #ededeb);
+  --muted: light-dark(#6f6f6b, #98989a);
+  --danger: light-dark(#bf3a2b, #ff8e80);
+  --scrim: rgb(0 0 0 / 0.45);
+  --accent: light-dark(
+    oklch(from var(--brand, var(--fg)) min(l, 0.55) c h),
+    oklch(from var(--brand, var(--fg)) max(l, 0.8) c h)
+  );
+  --on-accent: light-dark(#fff, #0f0f10);
+  --accent-soft: color-mix(in oklch, var(--accent) 14%, transparent);
+  --notice: light-dark(#2f6feb, #6ea8ff);
+
+  /* Space */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2.5rem;
+
+  /* Type */
+  --font: system-ui, sans-serif;
+  --font-mono: ui-monospace, monospace;
+  --text-sm: 0.8125rem;
+  --text-md: 0.9375rem;
+  --text-lg: 1.25rem;
+  --text-xl: 2.75rem;
+
+  /* Shape */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --control: 2.375rem;
+  --control-sm: 1.875rem;
+  --shadow-sm: 0 1px 2px light-dark(rgb(0 0 0 / 0.05), rgb(0 0 0 / 0.4));
+  --shadow-md: 0 2px 8px light-dark(rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.45));
+  --shadow-lg: 0 12px 32px light-dark(rgb(0 0 0 / 0.14), rgb(0 0 0 / 0.6));
+
+  /* Motion */
+  --fast: 120ms;
+  --slow: 260ms;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --fast: 0ms;
+    --slow: 0ms;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
 }
 
 body {
   margin: 0;
+  min-block-size: 100dvb;
   background: var(--bg);
   color: var(--fg);
+  font: var(--text-md) / 1.5 var(--font);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+p,
+ul,
+dl,
+dd {
+  margin: 0;
+}
+
+ul {
+  padding: 0;
+  list-style: none;
+}
+
+h1 {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+
+h2 {
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+
+a {
+  color: inherit;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 0.2em;
+}
+
+a:hover {
+  text-decoration-color: currentColor;
+}
+
+input[type="checkbox"] {
+  accent-color: var(--accent);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button,
+label,
+summary,
+th,
+h1,
+h2 {
+  user-select: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: var(--accent-soft);
+}
+
+table {
+  inline-size: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+th,
+td {
+  padding-block: var(--space-3);
+  padding-inline: var(--space-3);
+  border-block-end: 1px solid var(--border);
+  text-align: start;
+  vertical-align: middle;
+}
+
+th {
+  padding-block: var(--space-2);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+:is(th, td):first-child {
+  padding-inline-start: 0;
+}
+
+:is(th, td):last-child {
+  padding-inline-end: 0;
+}
+
+tbody tr:last-child td {
+  border-block-end: 0;
+}
+
+summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+summary::-webkit-details-marker {
+  display: none;
+}
+
+/* Utilities */
+
+.caret {
+  color: var(--muted);
+  transition: rotate var(--fast);
+}
+
+details[open] > summary .caret {
+  rotate: 90deg;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.small {
+  font-size: var(--text-sm);
+}
+
+.stack {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scroll {
+  overflow-x: auto;
+}
+
+.sr-only {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }

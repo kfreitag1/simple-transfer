@@ -13,6 +13,7 @@
     "@solidjs/web": "2.0.0-rc.21",
     "@st/shared": "workspace:*",
     "better-auth": "1.7.20",
+    "iconoir": "7.12.2",
     "solid-js": "2.0.0-rc.21"
   },
   "devDependencies": {
