@@ -25,7 +25,7 @@ const edgeHeaders = (pathname: string): Record<string, string> => ({
   "x-robots-tag": "noindex, nofollow",
   "x-content-type-options": "nosniff",
   "content-security-policy":
-    "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'",
+    "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; frame-ancestors 'none'",
   ...(pathname === "/api" || pathname.startsWith("/api/") ? { "cache-control": "private, no-store" } : {}),
 });
 
