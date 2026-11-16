@@ -4,7 +4,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 Version follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 Update in `package.json` as well
 
-## [Unreleased]
+## [0.2.0]
 
 ### Added
 
