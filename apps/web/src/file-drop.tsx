@@ -50,7 +50,7 @@ export function PickButtons(props: { compact?: boolean; onPick: OnPick }) {
   };
   const look = () => (props.compact ? ({ variant: "ghost", size: "sm" } as const) : {});
   return (
-    <div class="row">
+    <div class={[styles.buttons, "row"]}>
       <input
         ref={(el) => {
           files = el;

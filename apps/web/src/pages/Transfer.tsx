@@ -1,11 +1,14 @@
 import { useParams } from "@solidjs/router";
 import { type Transfer, type TransferFile, transferPath } from "@st/shared/contract";
-import { createMemo, createSignal, For, Show, useContext } from "solid-js";
+import { createMemo, createSignal, Errored, For, Show, useContext } from "solid-js";
 import { api, errorCode, isLocked, shareUrl, unwrap } from "../api.ts";
-import { CopyButton, ErrorText, FileRow, TransferMeta } from "../components.tsx";
-import { createFileDrop, DropZone, type OnPick, type Picked } from "../file-drop.tsx";
-import { formatApproximate, formatBytes, formatNumber, formatPercent, formatRate } from "../i18n/format.ts";
+import { CopyButton, ErrorText, FileRow, ReAddFiles, TransferMeta } from "../components.tsx";
+import { createFileDrop, type OnPick, type Picked } from "../file-drop.tsx";
+import { matchFiles, missingFiles } from "../files.ts";
+import { formatApproximate, formatBytes, formatPercent, formatRate } from "../i18n/format.ts";
 import { t } from "../i18n/index.ts";
+import { displayFileCount, displayName, packageRootOf } from "../packages.ts";
+import { buildTree, type Folder } from "../tree.ts";
 import { Button, LinkButton } from "../ui/Button.tsx";
 import { Input } from "../ui/Field.tsx";
 import { Icon } from "../ui/Icon.tsx";
@@ -13,71 +16,36 @@ import { Empty, Panel } from "../ui/surfaces.tsx";
 import { type Upload, UploadsContext } from "../uploads.ts";
 import styles from "./Transfer.module.css";
 
-/** Missing files listed by name when resuming; the rest are counted */
-const MISSING_LISTED = 50;
-
-type Folder = { name: string; folders: Map<string, Folder>; files: TransferFile[] };
-
-function buildTree(files: TransferFile[]): Folder {
-  const root: Folder = { name: "", folders: new Map(), files: [] };
-  for (const file of files) {
-    const segments = file.path.split("/");
-    let folder = root;
-    for (const name of segments.slice(0, -1)) {
-      const child = folder.folders.get(name) ?? { name, folders: new Map(), files: [] };
-      folder.folders.set(name, child);
-      folder = child;
-    }
-    folder.files.push(file);
-  }
-  return root;
-}
-
 /** Everything about one transfer: its download, or its upload while it is still incomplete */
 export default function TransferPage() {
   const params = useParams();
   const uploads = useContext(UploadsContext);
   const id = () => params.id!;
-  const [attempt, setAttempt] = createSignal(0);
+  const fetched = createMemo(() => unwrap(api.transfers({ id: id() }).get()));
   // Only this transfer's live upload, so another one running in the background cannot stand in for it
   const live = createMemo(() => uploads.get(id()));
-  const result = createMemo(() => {
-    attempt();
-    return unwrap(api.transfers({ id: id() }).get()).then(
-      (transfer) => ({ transfer, error: undefined }),
-      (error: unknown) => ({ transfer: undefined, error }),
-    );
-  });
-  /** The copy to render: the live upload's once it is done, the fetched one otherwise */
-  const settled = createMemo(() => (live()?.phase() === "done" ? live()?.transfer() : result().transfer));
-  /** Only while bytes are still moving (or interrupted); a finished upload has its own view */
-  const inFlight = createMemo(() => {
-    const upload = live();
-    return upload !== undefined && upload.phase() !== "done" ? upload : undefined;
-  });
+  /** While bytes are still moving (or interrupted); once done, its copy is newer than the fetched one */
+  const inFlight = createMemo(() => (live()?.phase() === "done" ? undefined : live()));
 
   return (
-    <Show
-      when={settled()}
-      fallback={
+    <Errored
+      fallback={(error, reset) => (
         <Show
-          when={isLocked(result().error)}
+          when={isLocked(error())}
           fallback={
             <Panel>
-              <Empty icon="file-not-found" title={t(`errors.${errorCode(result().error)}`)} />
+              <Empty icon="file-not-found" title={t(`errors.${errorCode(error())}`)} />
             </Panel>
           }
         >
-          <Unlock id={id()} onUnlocked={() => setAttempt((n) => n + 1)} />
-        </Show>
-      }
-    >
-      {(found) => (
-        <Show when={inFlight()} fallback={<TransferBody transfer={found()} />}>
-          {(upload) => <UploadProgress upload={upload()} />}
+          <Unlock id={id()} onUnlocked={reset} />
         </Show>
       )}
-    </Show>
+    >
+      <Show when={inFlight()} fallback={<TransferBody transfer={live()?.transfer() ?? fetched()} />}>
+        {(upload) => <UploadProgress upload={upload()} />}
+      </Show>
+    </Errored>
   );
 }
 
@@ -103,20 +71,12 @@ function TransferBody(props: { transfer: Transfer }) {
 function FinishUpload(props: { transfer: Transfer }) {
   const uploads = useContext(UploadsContext);
   const [picked, setPicked] = createSignal<Picked[]>([]);
-  const blobs = createMemo(() => {
-    const byKey = new Map(picked().map((entry) => [`${entry.path}\0${entry.file.size}`, entry.file]));
-    const matched = new Map<string, File>();
-    for (const file of props.transfer.files) {
-      const blob = byKey.get(`${file.path}\0${file.size}`);
-      if (blob) matched.set(file.path, blob);
-    }
-    return matched;
-  });
   /** Only the files that still lack bytes; finished ones are never asked for again */
   const needed = createMemo(() =>
     props.transfer.files.filter((file) => file.offset < file.size).sort((a, b) => a.path.localeCompare(b.path)),
   );
-  const missing = () => needed().filter((file) => !blobs().has(file.path));
+  const matched = createMemo(() => matchFiles(needed(), picked()));
+  const missing = createMemo(() => missingFiles(needed(), matched()));
   const add: OnPick = (more) => setPicked((list) => [...list, ...more]);
   const dragging = createFileDrop(add);
 
@@ -126,40 +86,16 @@ function FinishUpload(props: { transfer: Transfer }) {
         <h1>{props.transfer.title ?? t("send.resumeTitle")}</h1>
         <TransferMeta transfer={props.transfer} />
       </div>
-      <DropZone title={t("send.drop")} hint={t("send.resumeHint")} dragging={dragging()} onPick={add} />
-      <Show when={needed().length > 0}>
-        <div>
-          <div class={styles.needed}>
-            <Show when={missing().length > 0} fallback={<span>{t("send.allChosen")}</span>}>
-              <span>{t("send.missing", { count: formatNumber(missing().length) })}</span>
-            </Show>
-            <span>
-              {t("send.added", {
-                count: formatNumber(needed().length - missing().length),
-                total: formatNumber(needed().length),
-              })}
-            </span>
-          </div>
-          <Show when={missing().length > 0}>
-            <div class={styles.files}>
-              <For each={missing().slice(0, MISSING_LISTED)}>
-                {(file) => <FileRow name={file.path} meta={formatBytes(file.size)} />}
-              </For>
-              <Show when={missing().length > MISSING_LISTED}>
-                <p class="muted small">{t("send.more", { count: formatNumber(missing().length - MISSING_LISTED) })}</p>
-              </Show>
-            </div>
-          </Show>
-        </div>
-      </Show>
-      <Button
-        variant="primary"
-        block
-        disabled={missing().length > 0}
-        onClick={() => uploads.start(props.transfer, blobs())}
-      >
-        {t("send.resume")}
-      </Button>
+      <ReAddFiles needed={needed()} missing={missing()} hint={t("send.resumeHint")} dragging={dragging()} onPick={add}>
+        <Button
+          variant="primary"
+          block
+          disabled={missing().length > 0}
+          onClick={() => uploads.start(props.transfer, matched())}
+        >
+          {t("send.resume")}
+        </Button>
+      </ReAddFiles>
     </Panel>
   );
 }
@@ -218,8 +154,14 @@ function UploadProgress(props: { upload: Upload }) {
 function TransferView(props: { transfer: Transfer }) {
   const base = () => transferPath(props.transfer.id);
   const fileUrl = (file: TransferFile) => `${base()}/files/${encodeURIComponent(file.id)}`;
-  /** A lone file is downloaded as itself rather than inside a zip */
-  const only = () => (props.transfer.files.length === 1 ? props.transfer.files[0] : undefined);
+  const zipUrl = (path?: string) => `${base()}/zip${path === undefined ? "" : `?path=${encodeURIComponent(path)}`}`;
+  /** A lone file downloads as itself, a lone package as its own zip, anything more as one zip */
+  const primary = () => {
+    const files = props.transfer.files;
+    if (displayFileCount(files) > 1) return { href: zipUrl(), label: t("download.all") };
+    const root = packageRootOf(files[0]!.path);
+    return { href: root === undefined ? fileUrl(files[0]!) : zipUrl(root), label: t("download.one") };
+  };
   const link = () => shareUrl(props.transfer.id);
   return (
     <Panel>
@@ -240,23 +182,20 @@ function TransferView(props: { transfer: Transfer }) {
       </Show>
       <Show when={props.transfer.message}>{(message) => <p class={styles.message}>{message()}</p>}</Show>
       <div class={styles.tree}>
-        <FolderView folder={buildTree(props.transfer.files)} fileUrl={fileUrl} />
+        <FolderView folder={buildTree(props.transfer.files)} fileUrl={fileUrl} zipUrl={zipUrl} />
       </div>
-      <LinkButton
-        variant="primary"
-        block
-        icon="download"
-        href={only() ? fileUrl(only()!) : `${base()}/zip`}
-        target="_self"
-        download
-      >
-        {only() ? t("download.one") : t("download.all")}
+      <LinkButton variant="primary" block icon="download" href={primary().href} target="_self" download>
+        {primary().label}
       </LinkButton>
     </Panel>
   );
 }
 
-function FolderView(props: { folder: Folder; fileUrl: (file: TransferFile) => string }) {
+function FolderView(props: {
+  folder: Folder;
+  fileUrl: (file: TransferFile) => string;
+  zipUrl: (path: string) => string;
+}) {
   return (
     <ul>
       <For each={[...props.folder.folders.values()]}>
@@ -268,15 +207,22 @@ function FolderView(props: { folder: Folder; fileUrl: (file: TransferFile) => st
                 <Icon name="folder" />
                 <span class="truncate">{child.name}</span>
               </summary>
-              <FolderView folder={child} fileUrl={props.fileUrl} />
+              <FolderView folder={child} fileUrl={props.fileUrl} zipUrl={props.zipUrl} />
             </details>
+          </li>
+        )}
+      </For>
+      <For each={[...props.folder.packages.values()]}>
+        {(pkg) => (
+          <li>
+            <FileRow name={pkg.name} meta={formatBytes(pkg.size)} href={props.zipUrl(pkg.path)} />
           </li>
         )}
       </For>
       <For each={props.folder.files}>
         {(file) => (
           <li>
-            <FileRow name={file.path.split("/").at(-1)!} meta={formatBytes(file.size)} href={props.fileUrl(file)} />
+            <FileRow name={displayName(file.path)} meta={formatBytes(file.size)} href={props.fileUrl(file)} />
           </li>
         )}
       </For>

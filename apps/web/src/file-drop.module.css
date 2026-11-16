@@ -7,6 +7,26 @@
   cursor: pointer;
 }
 
+.buttons > button {
+  flex: 1 1 0;
+  min-inline-size: 0;
+}
+
+.drop .buttons {
+  inline-size: 100%;
+}
+
+/* Stacked on narrow screens, each button the full width */
+@media (width < 34rem) {
+  .buttons {
+    inline-size: 100%;
+  }
+
+  .buttons > button {
+    flex-basis: 100%;
+  }
+}
+
 .fan {
   --fan: 1; /* scales how far the cards spread */
   position: relative;

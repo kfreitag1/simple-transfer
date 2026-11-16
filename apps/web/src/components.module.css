@@ -1,3 +1,13 @@
+.logo {
+  display: flex;
+  block-size: var(--logo-size);
+}
+
+.logo svg {
+  block-size: 100%;
+  inline-size: auto;
+}
+
 .error {
   display: flex;
   gap: var(--space-2);
@@ -67,6 +77,24 @@ a.file:hover {
   white-space: nowrap;
 }
 
+.missing {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding-inline: var(--space-2);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.missingList {
+  display: grid;
+  max-block-size: 14.5rem;
+  margin-inline: calc(var(--space-2) * -1);
+  overflow-y: auto;
+}
+
 .uploads {
   position: fixed;
   inset-block-end: var(--space-4);
@@ -94,14 +122,22 @@ a.file:hover {
 
 .upload {
   display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
   gap: var(--space-2);
   padding: var(--space-3);
-  text-decoration: none;
   transition: background-color var(--fast);
 }
 
 .upload:hover {
   background: var(--sunken);
+}
+
+.uploadLink {
+  display: grid;
+  gap: var(--space-2);
+  min-inline-size: 0;
+  text-decoration: none;
 }
 
 .upload + .upload {
