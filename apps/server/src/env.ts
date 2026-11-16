@@ -13,7 +13,8 @@ export interface Env {
   oidc: {
     issuer: string;
     clientId: string;
-    clientSecret: string;
+    /** Absent for a public client, which authenticates with PKCE alone */
+    clientSecret: string | undefined;
     scopes: string[];
     providerName: string | null;
   };
@@ -52,7 +53,7 @@ export function loadEnv(source: Record<string, string | undefined> = Bun.env): E
     oidc: {
       issuer: required("OIDC_ISSUER").replace(/\/$/, ""),
       clientId: required("OIDC_CLIENT_ID"),
-      clientSecret: required("OIDC_CLIENT_SECRET"),
+      clientSecret: get("OIDC_CLIENT_SECRET") || undefined,
       scopes: (get("OIDC_SCOPES") ?? "openid profile email").split(/\s+/),
       providerName: get("OIDC_PROVIDER_NAME") || null,
     },
