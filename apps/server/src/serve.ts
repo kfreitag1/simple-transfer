@@ -19,6 +19,16 @@ export interface ServeOptions {
   maxBodyBytes: number;
 }
 
+/** What must hold for every response; API responses also stay out of shared caches */
+const edgeHeaders = (pathname: string): Record<string, string> => ({
+  "referrer-policy": "no-referrer",
+  "x-robots-tag": "noindex, nofollow",
+  "x-content-type-options": "nosniff",
+  "content-security-policy":
+    "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'",
+  ...(pathname === "/api" || pathname.startsWith("/api/") ? { "cache-control": "private, no-store" } : {}),
+});
+
 /** `Bun.serve` drops `Content-Length` on streamed responses
  *  TODO(oven-sh/bun#10507): see "HTTP edge" in ARCHITECTURE.md
  **/
@@ -26,6 +36,7 @@ export function serve(handle: (request: Request) => Promise<Response>, options: 
   return createServer(async (req, res) => {
     const aborted = new AbortController();
     res.on("close", () => res.writableFinished || aborted.abort());
+    const pathname = new URL(req.url ?? "/", "http://localhost").pathname;
     try {
       const headers = new Headers();
       for (let i = 0; i < req.rawHeaders.length; i += 2) headers.append(req.rawHeaders[i]!, req.rawHeaders[i + 1]!);
@@ -49,6 +60,7 @@ export function serve(handle: (request: Request) => Promise<Response>, options: 
       response.headers.forEach((value, name) => {
         if (name !== "set-cookie") head[name] = value;
       });
+      Object.assign(head, edgeHeaders(pathname));
       const cookies = response.headers.getSetCookie();
       if (cookies.length > 0) head["set-cookie"] = cookies;
       res.writeHead(response.status, head);
@@ -62,7 +74,7 @@ export function serve(handle: (request: Request) => Promise<Response>, options: 
       if (aborted.signal.aborted) return;
       console.error("request failed", error);
       if (res.headersSent) res.destroy();
-      else res.writeHead(500).end();
+      else res.writeHead(500, edgeHeaders(pathname)).end();
     }
   }).listen(options.port);
 }

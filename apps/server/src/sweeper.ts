@@ -26,5 +26,5 @@ export async function sweep(ctx: Context, now = new Date()): Promise<void> {
 export function startSweeper(ctx: Context): void {
   const run = () => sweep(ctx).catch((error) => console.error("sweep failed", error));
   run();
-  setInterval(run, INTERVAL_MS);
+  setInterval(run, INTERVAL_MS).unref();
 }

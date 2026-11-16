@@ -1,5 +1,5 @@
 import { UNLOCK_TTL_SECONDS } from "@st/shared/constants";
-import { ChunkQuery, TransferCreate, transferPath, Unlock } from "@st/shared/contract";
+import { ChunkQuery, TransferCreate, transferPath, Unlock, ZipQuery } from "@st/shared/contract";
 import { Elysia } from "elysia";
 import type { Context } from "../app.ts";
 import { authPlugin } from "../plugins/auth.ts";
@@ -54,6 +54,6 @@ export const transferRoutes = (ctx: Context) =>
       Object.assign(set.headers, headers);
       return body;
     })
-    .get("/:id/zip", { viewer: true, rateLimit: "public" }, ({ viewer, params, cookie }) =>
-      downloadTransferZip(ctx, viewTransfer(ctx, params.id, viewer, cookie.unlock?.value)),
+    .get("/:id/zip", { viewer: true, rateLimit: "public", query: ZipQuery }, ({ viewer, params, cookie, query }) =>
+      downloadTransferZip(ctx, viewTransfer(ctx, params.id, viewer, cookie.unlock?.value), query.path),
     );

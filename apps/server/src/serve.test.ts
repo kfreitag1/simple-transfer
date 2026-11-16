@@ -41,6 +41,20 @@ test("a streamed response keeps its Content-Length, so downloads show progress",
   expect([body[0], body.at(-1)]).toEqual([1, 8]);
 });
 
+test("edge headers keep API responses out of caches and search indexes", async () => {
+  const api = await fetch(`${url}api/anything`);
+  expect(api.headers.get("cache-control")).toBe("private, no-store");
+  expect(api.headers.get("referrer-policy")).toBe("no-referrer");
+  expect(api.headers.get("x-robots-tag")).toBe("noindex, nofollow");
+  await api.body?.cancel();
+
+  const page = await fetch(url);
+  expect(page.headers.get("cache-control")).toBeNull();
+  expect(page.headers.get("referrer-policy")).toBe("no-referrer");
+  expect(page.headers.get("x-robots-tag")).toBe("noindex, nofollow");
+  await page.body?.cancel();
+});
+
 test("request bodies stream through up to the limit and fail past it", async () => {
   const post = async (size: number) => (await fetch(url, { method: "POST", body: new Uint8Array(size) })).text();
   expect(await post(MiB)).toBe(String(MiB));

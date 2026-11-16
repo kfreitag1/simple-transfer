@@ -34,5 +34,10 @@ export function storageContract(name: string, create: () => Promise<Storage>) {
       await storage.remove("missing/");
       expect(await Promise.all(["a/1", "a/2", "ab/1", "b/1"].map((key) => storage.size(key)))).toEqual([0, 0, 1, 1]);
     });
+
+    test("health succeeds when the backend can store blobs", async () => {
+      const storage = await create();
+      await expect(storage.health()).resolves.toBeUndefined();
+    });
   });
 }

@@ -1,4 +1,4 @@
-import { mkdir, open, readdir, rm, stat } from "node:fs/promises";
+import { mkdir, open, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { OffsetMismatch } from "../errors.ts";
 import type { Storage } from "./storage.ts";
@@ -58,6 +58,16 @@ export function createLocalStorage(root: string): Storage {
           .filter((entry) => entry.startsWith(name))
           .map((entry) => rm(join(dir, entry), { recursive: true, force: true })),
       );
+    },
+
+    async health() {
+      await mkdir(root, { recursive: true });
+      const probe = pathOf(`.health-${crypto.randomUUID()}`);
+      try {
+        await writeFile(probe, "ok");
+      } finally {
+        await rm(probe, { force: true }).catch(() => {});
+      }
     },
   };
 }

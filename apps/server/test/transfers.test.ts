@@ -80,6 +80,46 @@ test("an uploaded transfer downloads over HTTP byte for byte and with its length
   expect(after.downloads).toBe(3);
 });
 
+test("a folder or package can be downloaded as its own zip rooted at its name", async () => {
+  const { send, listen } = await setup();
+  const files = {
+    "MyApp.app/Contents/Info.plist": bytes(3, 1),
+    "MyApp.app/Contents/MacOS/MyApp": bytes(4, 2),
+    "Projects/Other.app/Contents/data": bytes(6, 4),
+    "notes.txt": bytes(5, 3),
+  };
+  const { ready } = await send(files);
+  const server = await listen();
+  try {
+    const url = `${server.url}/api/transfers/${ready.id}/zip?path=${encodeURIComponent("MyApp.app")}`;
+    const response = await fetch(url);
+    expect(response.headers.get("content-disposition")).toBe("attachment; filename*=UTF-8''MyApp.app.zip");
+    const archive = new Uint8Array(await response.arrayBuffer());
+    expect(response.headers.get("content-length")).toBe(String(archive.length));
+    const lastModified = new Date(ready.createdAt);
+    const expected = downloadZip(
+      ready.files
+        .filter((file) => file.path.startsWith("MyApp.app/"))
+        .map((file) => ({ name: file.path, lastModified, input: files[file.path as keyof typeof files] })),
+    );
+    expect(archive).toEqual(new Uint8Array(await expected.arrayBuffer()));
+
+    const nested = await fetch(
+      `${server.url}/api/transfers/${ready.id}/zip?path=${encodeURIComponent("Projects/Other.app")}`,
+    );
+    expect(nested.headers.get("content-disposition")).toBe("attachment; filename*=UTF-8''Other.app.zip");
+    const nestedExpected = downloadZip([
+      { name: "Other.app/Contents/data", lastModified, input: files["Projects/Other.app/Contents/data"] },
+    ]);
+    expect(new Uint8Array(await nested.arrayBuffer())).toEqual(new Uint8Array(await nestedExpected.arrayBuffer()));
+
+    expect((await fetch(`${server.url}/api/transfers/${ready.id}/zip?path=missing`)).status).toBe(404);
+    expect((await fetch(`${server.url}/api/transfers/${ready.id}/zip?path=../secret`)).status).toBe(404);
+  } finally {
+    server.close();
+  }
+});
+
 test("an interrupted upload resumes from the stored offsets and yields identical bytes", async () => {
   const { request, create, owner, fetchAs } = await setup();
   const data = bytes(2 * CHUNK_BYTES + 5);

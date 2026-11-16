@@ -1,10 +1,11 @@
-import type { Config } from "@st/shared/contract";
+import type { Config, Health } from "@st/shared/contract";
 import { Elysia, NotFound } from "elysia";
 import { adminRoutes } from "./admin/routes.ts";
 import { type Auth, createAuth } from "./auth.ts";
 import { type Release, readChangelog } from "./changelog.ts";
 import { createDb, type Db } from "./db/index.ts";
 import type { Env } from "./env.ts";
+import { createHealthCheck } from "./health.ts";
 import { limitsFor, usedBytes } from "./limits.ts";
 import { authPlugin } from "./plugins/auth.ts";
 import { blobLength } from "./serve.ts";
@@ -40,13 +41,18 @@ export function createContext(env: Env, options: { test?: boolean } = {}): Conte
 }
 
 export function createApp(ctx: Context) {
+  const health = createHealthCheck(ctx);
   return (
     new Elysia({ prefix: "/api", cookie: { secrets: ctx.env.authSecret, sign: ["unlock"] } })
       .use(blobLength())
       .use(authPlugin(ctx.auth))
       .get("/auth/*", ({ request }) => ctx.auth.handler(request))
       .post("/auth/*", { parse: "none" }, ({ request }) => ctx.auth.handler(request))
-      .get("/health", () => ({ ok: true }))
+      .get("/health", async ({ set }): Promise<Health> => {
+        const status = await health();
+        if (!status.ok) set.status = 503;
+        return status;
+      })
       .get("/config", (): Config => ({ providerName: ctx.env.oidc.providerName, settings: getSettings(ctx) }))
       .get("/me", { auth: true }, ({ user }) => ({
         limits: limitsFor(ctx.db, user),

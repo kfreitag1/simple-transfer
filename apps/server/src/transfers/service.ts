@@ -149,6 +149,7 @@ export function viewTransfer(ctx: Context, id: string, viewer: Viewer, unlockCoo
   return row;
 }
 
+// TODO: paginate
 function summaries(ctx: Context, where: SQL | undefined) {
   return ctx.db
     .select({ row: transfer, fileCount: count(file.id), owner: { id: user.id, name: user.name, email: user.email } })
@@ -218,7 +219,6 @@ export async function unlockTransfer(ctx: Context, id: string, password: string)
 const attachment = (name: string) => ({
   "content-type": "application/octet-stream",
   "content-disposition": `attachment; filename*=UTF-8''${encodeURIComponent(name).replace(/['()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`)}`,
-  "x-content-type-options": "nosniff",
 });
 
 const countDownload = (ctx: Context, id: string) =>
@@ -237,16 +237,20 @@ export function downloadFile(ctx: Context, row: Row, fileId: string, ranged: boo
   };
 }
 
-export function downloadTransferZip(ctx: Context, row: Row): Response {
-  const entries = filesOf(ctx, row.id).map((entry) => ({
-    name: entry.path,
+/** Everything, or with `folder` only what is under it, its entries rooted at the folder's own name */
+export function downloadTransferZip(ctx: Context, row: Row, folder?: string): Response {
+  const files = filesOf(ctx, row.id).filter((entry) => folder === undefined || entry.path.startsWith(`${folder}/`));
+  if (files.length === 0) throw new NotFound();
+  const parent = folder?.slice(0, folder.lastIndexOf("/") + 1) ?? "";
+  const entries = files.map((entry) => ({
+    name: entry.path.slice(parent.length),
     size: entry.size,
     lastModified: row.createdAt,
     input: readFile(ctx, entry),
   }));
   countDownload(ctx, row.id);
   const zip = downloadZip(entries, { length: predictLength(entries) });
-  for (const [name, value] of Object.entries(attachment(`${row.title || "transfer"}.zip`)))
-    zip.headers.set(name, value);
+  const name = folder === undefined ? row.title || "transfer" : folder.slice(parent.length);
+  for (const [header, value] of Object.entries(attachment(`${name}.zip`))) zip.headers.set(header, value);
   return zip;
 }

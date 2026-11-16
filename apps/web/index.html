@@ -6,10 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="icon" href="/favicon.svg" />
     <title>Simple Transfer</title>
-    <script>
-        // Runs before first paint so a chosen theme doesn't flash the sys one
-        document.documentElement.dataset.theme = localStorage.getItem("theme") ?? "system";
-    </script>
+    <script src="/theme.js"></script>
 </head>
 
 <body>

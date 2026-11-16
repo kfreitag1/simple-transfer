@@ -18,4 +18,7 @@ export interface Storage {
 
   /** Deletes every key that starts with `prefix`. Succeeds when there are none */
   remove(prefix: string): Promise<void>;
+
+  /** Rejects unless a blob can be written right now: a read-only mount or a full disk must fail it */
+  health(): Promise<void>;
 }
