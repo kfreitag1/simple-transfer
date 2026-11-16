@@ -1,0 +1,51 @@
+name: checks
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Lint, typecheck, test, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read the Bun version from the Dockerfile
+        id: bun
+        run: |
+          version="$(sed -n 's/^ARG BUN_VERSION=//p' Dockerfile)"
+          if [ -z "$version" ]; then
+            echo "No ARG BUN_VERSION in the Dockerfile" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ steps.bun.outputs.version }}
+
+      - name: Cache Bun packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - run: bun install --frozen-lockfile
+
+      - name: Check migrations are current
+        run: |
+          timeout 120 bun run db:generate
+          if [ -n "$(git status --porcelain -- apps/server/migrations)" ]; then
+            echo "::error::The database schema changed without a committed migration. Run 'bun run db:generate' and commit apps/server/migrations."
+            git status --short -- apps/server/migrations
+            git diff -- apps/server/migrations
+            exit 1
+          fi
+
+      - run: bun run check
+      - run: bun run build

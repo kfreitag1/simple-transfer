@@ -15,45 +15,57 @@ permissions:
 
 jobs:
   checks:
-    name: Lint, typecheck, test, build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Read the Bun version from the Dockerfile
-        id: bun
-        run: |
-          version="$(sed -n 's/^ARG BUN_VERSION=//p' Dockerfile)"
-          if [ -z "$version" ]; then
-            echo "No ARG BUN_VERSION in the Dockerfile" >&2
-            exit 1
-          fi
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: ${{ steps.bun.outputs.version }}
-
-      - name: Cache Bun packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.bun/install/cache
-          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
-          restore-keys: bun-${{ runner.os }}-
-
-      - run: bun install --frozen-lockfile
-      - run: bun run check
-      - run: bun run build
+    uses: ./.github/workflows/checks.yml
 
   image:
-    name: Docker image builds
+    name: Docker image builds and runs
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
       - uses: docker/build-push-action@v6
         with:
           context: .
+          load: true
+          tags: simple-transfer:ci
           push: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Smoke test the image
+        run: |
+          data="$(mktemp -d)"
+          trap 'docker logs simple-transfer-ci 2>/dev/null || true; docker rm -f simple-transfer-ci >/dev/null 2>&1 || true; rm -rf "$data"' EXIT
+          docker run --detach --name simple-transfer-ci \
+            --publish 3000:3000 \
+            --volume "$data/db:/data/db" \
+            --volume "$data/files:/data/files" \
+            --env BASE_URL=http://127.0.0.1:3000 \
+            --env AUTH_SECRET=ci-secret-ci-secret-ci-secret-ci-secret \
+            --env OIDC_ISSUER=http://127.0.0.1:9 \
+            --env OIDC_CLIENT_ID=test \
+            simple-transfer:ci
+
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:3000/api/health > /tmp/health.json; then
+              break
+            fi
+            sleep 1
+          done
+
+          cat /tmp/health.json
+          grep -q '"ok":true' /tmp/health.json
+          curl --fail --silent http://127.0.0.1:3000/api/config > /dev/null
+          curl --fail --silent http://127.0.0.1:3000/ | grep -q '<div id="app">'
+          curl --fail --silent http://127.0.0.1:3000/not-a-transfer | grep -q '<div id="app">'
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:3000/api/not-a-route)" = "404"
+
+          uid="$(docker run --rm simple-transfer:ci id -u)"
+          echo "container uid: $uid"
+          test "$uid" != "0"
+
+          docker stop --time 15 simple-transfer-ci > /dev/null
+          exit_code="$(docker inspect --format '{{.State.ExitCode}}' simple-transfer-ci)"
+          echo "container exit code: $exit_code"
+          test "$exit_code" = "0"

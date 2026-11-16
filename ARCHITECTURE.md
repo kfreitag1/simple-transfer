@@ -30,8 +30,10 @@ Routes are thin: validate with contract schemas, call a service function taking 
 ## Auth
 
 - Better Auth, OIDC only, one provider with id `oidc` (`genericOAuth`). Redirect URI: `${BASE_URL}/api/auth/callback/oidc`. The client starts it with `signIn()` in `apps/web/src/auth.ts`
+- Authorization code flow, always with PKCE. `OIDC_CLIENT_SECRET` is optional: with it the client is confidential, without it public
 - Every user authed at the IdP is provisioned. The first user ever created gets role `admin`, all others `user` (`databaseHooks` in `auth.ts`), from the better auth admin plugin
 - User administration (list, set role, ban) uses the admin plugin's own endpoints through `authClient.admin.*`. There are no custom user routes. Users are banned, not deleted: `transfer.owner_id` is `ON DELETE RESTRICT` so blobs cannot be orphaned
+- Signing out ends the session here and returns to `/login`; it does not sign out at the provider (`disableRedirect` turns off Better Auth's RP-initiated logout)
 - Route protection: `{ auth: true }` / `{ admin: true }` macros (`plugins/auth.ts`). Routes that are public but owner-aware use `{ viewer: true }`, which adds the session user if there is one
 
 ## Limits
@@ -46,9 +48,11 @@ The built-in `DEFAULT_LIMITS` are all `null`: until an admin sets limits there i
 
 ## Instance settings
 
-An admin can give the instance a name, an accent colour and a logo (`Branding` in the contract); each is `null` until set, which keeps the built-in look. The same row (`settings`, one row with id 1) holds `updateCheck`. Both are written whole by `PUT /admin/settings` — a partial write would reset what it left out — and read by everyone through `GET /config`, the admin UI included
+An admin can give the instance a name, light and dark accents and a logo (`Branding` in the contract). The name and logo are `null` until set, which keeps the built-in look; the accent is two optional `#rrggbb` values, `light` and `dark`. The same row (`settings`, one row with id 1) holds `updateCheck`. All of it is written whole by `PUT /admin/settings` — a partial write would reset what it left out — and read by everyone through `GET /config`, the admin UI included
 
-The logo is stored and served as a data URL (at most `MAX_LOGO_BYTES` of image), so it needs no route, no cache rules and no blob, and an SVG cannot run script because it is only ever an `<img>` source. The web app applies branding in `Layout.tsx`: document title, favicon, and the `--brand` CSS variable from which `index.css` derives the accent for both themes
+Only explicitly chosen accent values are stored. A side that has no value follows the other by moving its OKLCH lightness into that theme's range (at most 0.55 for light, at least 0.8 for dark); with neither set, each theme uses its text colour. So setting one swatch derives the other, setting both makes each independent, and clearing one returns it to automatic; clearing both returns both to the default. `accentColors` in `apps/web/src/color.ts` lets the browser resolve those CSS expressions; only the default value needs a short DOM probe to read the theme's text colour.
+
+The logo is stored and served as a data URL (at most `MAX_LOGO_BYTES` of image), so it needs no route, no cache rules and no blob, and an SVG cannot run script because it is only ever an `<img>` source. The web app applies branding in `Layout.tsx`: document title, favicon, and the `--brand-light` and `--brand-dark` CSS variables that `index.css` uses for `--accent`
 
 ## Version and updates
 
@@ -62,10 +66,11 @@ The version lives in the root `package.json` and nowhere else. `CHANGELOG.md` (K
 
 ## API
 
-All under `/api`. JSON unless noted. Errors are RFC 9457 problem documents with a `code` from `ERROR_STATUS`; on the client they become `ApiError` (`shared/errors.ts`). No pagination
+All under `/api`. JSON unless noted. Errors are RFC 9457 problem documents with a `code` from `ERROR_STATUS`; on the client they become `ApiError` (`shared/errors.ts`). The exception is `/health`, which returns `Health` (with its own status) rather than a problem. No pagination
 
 | Method and path | Access | Body → response |
 |---|---|---|
+| `GET /health` | anyone | → `Health`; `503` when the database or storage is unusable |
 | `GET /config` | anyone | → `Config` |
 | `GET /me` | user | → `Me` |
 | `POST /transfers` | user, limit `create` | `TransferCreate` → `Transfer` |
@@ -76,7 +81,7 @@ All under `/api`. JSON unless noted. Errors are RFC 9457 problem documents with 
 | `POST /transfers/:id/finalize` | owner | → `Transfer` |
 | `POST /transfers/:id/unlock` | anyone, limit `unlock` | `Unlock` → 204 + cookie |
 | `GET /transfers/:id/files/:fileId` | view, limit `public` | → file bytes, `Range` supported |
-| `GET /transfers/:id/zip` | view, limit `public` | → streamed zip |
+| `GET /transfers/:id/zip` | view, limit `public` | → streamed zip; optional `?path=<dir>` zips one folder/package |
 | `GET /admin/transfers` | admin | → `AdminTransfer[]` |
 | `GET /admin/limits` | admin | → `LimitOverride[]`, the global row included |
 | `PUT /admin/limits` | admin | `LimitOverride` → 204; empty `values` deletes the row |
@@ -124,13 +129,14 @@ Offsets live only in storage. `Transfer.files[].offset` is `storage.size` while 
 ## Downloads
 
 - File: return `storage.read(key)` so Elysia serves `Range`. Headers: `Content-Type: application/octet-stream`, `Content-Disposition: attachment; filename*=UTF-8''<encoded basename>`, `X-Content-Type-Options: nosniff`. User content is never served inline
-- Zip: `client-zip` `downloadZip` over `storage.read(key)` per file, stored uncompressed, entry names are the file paths, `Content-Length` from `predictLength`. Streams with constant memory and supports Zip64. Name: `<title or "transfer">.zip`
+- Zip: `client-zip` `downloadZip` over `storage.read(key)` per file, stored uncompressed, entry names are the file paths, `Content-Length` from `predictLength`. Streams with constant memory and supports Zip64. Name: `<title or "transfer">.zip`. With `?path=<dir>`, only files under that directory are included (`not-found` when there are none), entry names are rooted at the directory's basename, and the zip is named after it
 - Every download carries `Content-Length`, so browsers show progress (see "HTTP edge")
+- `serve` sends `Cache-Control: private, no-store` on every `/api` response, so a shared cache cannot serve a password-protected download without the unlock cookie. It also sends `Referrer-Policy: no-referrer` and `X-Robots-Tag: noindex, nofollow`; `apps/web/public/robots.txt` disallows every crawler
 - `downloads` increments once per zip request and once per file request that has no `Range` header
 
 ## Storage
 
-The `Storage` port has four methods and no knowledge of transfers. Keys are `<transferId>/<fileId>`; deleting a transfer is `remove("<transferId>/")`
+The `Storage` port has five methods and no knowledge of transfers. Keys are `<transferId>/<fileId>`; deleting a transfer is `remove("<transferId>/")`. `health()` is a write-and-delete probe, used by `/api/health`: a read-only mount or full disk must fail it, which a stat or access check would not reliably catch
 
 `local.ts`: files under `STORAGE_DIR/<key>`, appended in place (no temp files or renames, so nothing depends on other filesystems). It serializes `append` per key with an in-process lock, because check-then-append would otherwise race
 
@@ -163,13 +169,15 @@ Chunk uploads are not rate limited: they are bounded by authentication, declared
 - `serve` never writes more than the declared `Content-Length`: Bun streams a sliced file `Blob` (a Range response) to the end of the file, which would corrupt keep-alive connections
 - `serve` caps request bodies (`maxBodyBytes`)
 
+`serve` also adds the headers that must hold for every route: `Referrer-Policy: no-referrer`, `X-Robots-Tag: noindex, nofollow`, and, for `/api`, `Cache-Control: private, no-store`. It leaves `Cache-Control` alone elsewhere, so the built web assets keep their own. The web app ships a `robots.txt` that disallows everything
+
 When the Bun issue is fixed, `serve.ts` can go back to `Bun.serve` and lose these three
 
 ## Web app
 
 | Path | Page | Access |
 |---|---|---|
-| `/` | Send: drop or pick files and folders (the whole window is a drop target; pasted files are accepted), then title, message, and password and expiry under "Options". Submitting creates the transfer, starts its upload and opens `/:id` | user |
+| `/` | Send: drop or pick files and folders (the whole window is a drop target; pasted files are accepted), then title, message, and password and expiry under "Options". Unfinished input is kept as a draft; after a reload it lists the files to choose again. Submitting creates the transfer, starts its upload and opens `/:id` | user |
 | `/login` | one sign-in button, labelled with `OIDC_PROVIDER_NAME` when set (from `GET /config`) | |
 | `/transfers` | own transfers: files, size, downloads, expiry, copy link, delete. Every row opens the transfer | user |
 | `/:id` | the transfer page, at the root: three hyphenated words cannot collide with a page of the app's own. Ready: password prompt if locked, file tree, per-file download and everything as a zip (a lone file downloads as itself); the owner also gets the link, and the download count. Still uploading: the owner's upload — its progress if this browser is running it, otherwise the files that still need choosing. Signed-out visitors see the brand and nothing else of the app | public |
@@ -178,14 +186,15 @@ When the Bun issue is fixed, `serve.ts` can go back to `Bun.serve` and lose thes
 - Routes are defined once in `src/index.tsx` with `createRouter`. Unauthenticated users on a protected page go to `/login` and back
 - Folders: `<input webkitdirectory>` and drag-and-drop directory entries; `path` is the relative path. The download page renders paths as a tree; the zip recreates the folders
 - **One page per transfer, and uploads outlive it.** `/:id` is the transfer's page in every state, so nothing has a second address. Every upload lives in `src/uploads.ts`, created in `Layout` above the routes, so changing pages never interrupts one and the chosen blobs stay in memory for resume. The page shows the live upload when this browser has it, and otherwise the server's copy: for an incomplete transfer that is the files which still lack bytes (finished ones are never asked for again), how many of them are matched, and a "Resume" that stays disabled until all of them have been added, matched by path and size. Uploads are keyed by id, so several can run at once and each page shows only its own. `UploadIndicator` lists every upload still in flight, one row each, on any page; a row opens that transfer's page. An interrupted one offers Resume (the blobs are still in memory), deleting a transfer aborts and drops its upload, and one that finishes while the user is elsewhere says so in a toast
-- Server data: async memos over `api.*` under `<Loading>`; mutations then `refresh`. No client-side store library
+- **The Send form is a draft above the routes too.** `src/drafts.ts`, created in `Layout`, holds the chosen files and the title, message, password and expiry, so leaving `/` and coming back restores the form. A draft exists only while at least one file is chosen: removing the last file, submitting, cancelling or signing out clears the whole draft, including its text. The text, password, expiry and the paths and sizes of the chosen files are kept in `sessionStorage`, so a reload restores the draft; the files themselves cannot be stored, so `/` asks for them again and offers to cancel the draft. That list is `ReAddFiles`, shared with resuming an interrupted upload: both match selected files by path and size and show the entries still missing; on a restored draft each missing entry can be removed. `beforeunload` warns while files are chosen or an upload is active
+- Server data: async memos over `api.*` under `<Loading>`; mutations then `refresh`. A failure reaches the nearest `<Errored>`: `/:id` has its own, where a locked transfer shows the password prompt and unlocking resets the boundary, which fetches again; anything else reaches `FailureBoundary`, which shows the error with a retry instead of leaving a spinner. A failed sign-in returns to `/login?error=` and shows under the button. No client-side store library
 - Downloads are plain `<a href>` links to the API so the browser streams them
 
 ### Design system
 
 Bespoke and small; no UI library. The aim is an interface that goes unnoticed: neutral colours, one accent, system fonts, and explanation kept behind `Hinted` or a tooltip rather than printed on the page
 
-- **Tokens** are CSS variables in `src/index.css`: colour, space, type, radius, shadow, motion. Nothing else contains a literal colour, size or duration. Themes use `light-dark()`; the user's choice of system, light or dark (`src/theme.ts`, in the account menu) sets `color-scheme` through `data-theme` on the root. The accent derives from `--brand` (see "Instance settings") with its lightness clamped per theme
+- **Tokens** are CSS variables in `src/index.css`: colour, space, type, radius, shadow, motion. Nothing else contains a literal colour, size or duration. Themes use `light-dark()`; the user's choice of system, light or dark (`src/theme.ts`, in the account menu) sets `color-scheme` through `data-theme` on the root. The accent comes from `--brand-light` and `--brand-dark`, resolved by `accentColors` (see "Instance settings")
 - **`src/ui/`** holds the generic controls, each with its CSS module, knowing nothing of transfers: `Icon`, `Button` / `LinkButton` / `IconButton`, `Input` / `Textarea` / `Select` / `Segmented` / `Field`, `Tooltip` / `Hinted`, `Dialog` with `confirmAction` and `toast` (`overlays.tsx`), and `Panel` / `Page` / `Empty` (`surfaces.tsx`). Pages compose these and do not style raw form elements themselves
 - **`src/components.tsx`** holds what is specific to this app and shared by pages
 - **Two layouts:** `Panel`, a narrow card for one focused task (login, send, download), and `Page`, a wide one for lists and settings. A flow renders a new `Panel` per step, which gives the step transition
@@ -212,25 +221,26 @@ Write a test only where a mistake is plausible and would matter. Do not test fra
 **Unit tests (most tests).** Pure logic, no app, no network:
 - `shared`: `resolveLimits`, `checkTransfer` boundaries, `normalizePath` rejections, `uploadTransfer` against a fake `fetch` (resume from offset, mismatch recovery, retry then give up, abort)
 - `server`: storage contract suite run against `local.ts` (append at wrong offset, concurrent appends, `remove` prefix isolation), rate-limit window arithmetic, sweeper selection, `*_FILE` variables in `loadEnv`, `clientIp`, and `serve` over real HTTP (streamed `Content-Length`, body cap, client address not spoofable)
-- `web`: `t` interpolation and locale fallback. No component tests
+- `web`: `t` interpolation and locale fallback, package/tree presentation, and file matching by path and size. No component tests
 
 **Integration tests (few).** Through `createTestApp().request`, real SQLite in memory and a temp storage directory. One per critical flow:
 - First user is admin
 - Create → upload with the real `uploadTransfer` → finalize → download a file, a range and the zip byte-for-byte over real HTTP (`listen()` in the harness), each with `Content-Length`
 - An interrupted upload resumes and yields identical bytes
 - Limits are enforced at creation for a user with global limits and role and user overrides; quota frees on delete
+- Branding is admin-only and survives a round trip through `GET /config`, accent sides included
 - Password: locked without cookie, wrong password, unlocked after, owner bypass
 - Expired and unfinished transfers are invisible, and swept with their blobs
 - A non-owner cannot append, finalize or delete; an admin can delete
 
 ## Deployment
 
-One image (`Dockerfile`): installs, builds the web app, runs `bun apps/server/src/index.ts`, which serves API and web on `PORT`, and answers a `HEALTHCHECK` on `/api/health`
+One image (`Dockerfile`): a build stage installs every dependency and builds the web app; a runtime-deps stage installs only `@st/server`'s production dependencies; the runtime stage copies the server and shared sources, migrations and built web app, and runs `bun apps/server/src/index.ts`, which serves API and web on `PORT`, and answers a `HEALTHCHECK` on `/api/health`. The app process runs as the image's unprivileged `bun` user (uid 1000): the entrypoint starts as root only to make `DB_PATH`'s directory and `STORAGE_DIR` writable by that user, then drops privileges with `setpriv`. Data left root-owned by an older image is fixed on the first start. That endpoint is a readiness check, not a liveness ping: it reads a row from SQLite, checks the database file and its directory are writable, and writes then deletes a probe file in `STORAGE_DIR`, returning `{ ok, db, storage }` with `200`, or the same body with `503` if either fails. The answer is cached for five seconds, so a burst of requests does not write on every probe; the Docker healthcheck runs it every 30s. Compose does not restart a container merely for being unhealthy, so the status is for `docker ps`, `depends_on: condition: service_healthy` and external monitoring
 
 Images are published to `ghcr.io/kfreitag1/simple-transfer` for `linux/amd64` and `linux/arm64`, so `compose.yaml` pulls rather than builds (it has a commented `build:` for running from a checkout). CI and the release pipeline are GitHub Actions and need no secrets: GHCR uses `GITHUB_TOKEN`
 
-- `ci.yml` runs on every pull request and push to `main`: `bun run check` (lint, typecheck, tests), `bun run build`, and a Docker build with layer caching. Nothing is pushed
-- `release.yml` runs on a `v*` tag. It refuses a tag that does not match `package.json`, then pushes the image tagged `X.Y.Z`, `X.Y` and — for a final release — `latest`, and afterwards publishes a GitHub release whose notes are that version's `CHANGELOG.md` section (a version without notes fails the job). Pre-release tags (with a `-`) skip `latest` and are marked as pre-releases
+- `checks.yml` is reusable and is what both pipelines run: `bun run check` (lint, typecheck, tests), `bun run build`, and a check that `db:generate` leaves no changed migration. `ci.yml` runs it on every pull request and push to `main`, then builds the Docker image with layer caching and smoke-tests it: health, config, the SPA and API routes, the non-root user, and shutdown. Nothing is pushed
+- `release.yml` runs on a `v*` tag. It runs the same checks and refuses a tag that does not match `package.json` or whose version has no `CHANGELOG.md` section before it pushes anything. Then it pushes the image tagged `X.Y.Z`, `X.Y` and — for a final release — `latest`, and afterwards publishes a GitHub release from the validated notes. Pre-release tags (with a `-`) skip `latest` and are marked as pre-releases
 - The runtime is pinned once, in the Dockerfile's `ARG BUN_VERSION`; CI reads that value rather than keeping a copy, so the checks run on the Bun the image ships. Migrations apply at startup. `compose.yaml` mounts `/data/db` and `/data/files` separately; set `DB_DIR` and `FILES_DIR` to host paths on whichever disks you want. Any variable can be supplied as `<NAME>_FILE`, a path whose contents are the value (for Docker secrets such as `OIDC_CLIENT_SECRET_FILE`); setting both is an error. TLS and large-body settings belong to the reverse proxy; it must allow request bodies of `CHUNK_BYTES` and should not buffer responses
 
 Development: `compose.dev.yaml` provides a mock OIDC provider; `bun run dev` starts the API on 3000 and Vite on 5173 with `/api` proxied, so the browser sees one origin and there is no CORS
