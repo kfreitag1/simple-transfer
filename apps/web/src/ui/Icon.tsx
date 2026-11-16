@@ -1,7 +1,10 @@
 // Iconoir line drawings throughout; Icon.module.css thickens their stroke to match the app's type
+import appWindow from "iconoir/icons/regular/app-window.svg?raw";
 import archive from "iconoir/icons/regular/archive.svg?raw";
+import boxIso from "iconoir/icons/regular/box-iso.svg?raw";
 import checkCircle from "iconoir/icons/regular/check-circle.svg?raw";
 import clock from "iconoir/icons/regular/clock.svg?raw";
+import codeBrackets from "iconoir/icons/regular/code-brackets.svg?raw";
 import computer from "iconoir/icons/regular/computer.svg?raw";
 import copy from "iconoir/icons/regular/copy.svg?raw";
 import download from "iconoir/icons/regular/download.svg?raw";
@@ -20,6 +23,7 @@ import multiplePages from "iconoir/icons/regular/multiple-pages.svg?raw";
 import musicNote from "iconoir/icons/regular/music-note.svg?raw";
 import navArrowDown from "iconoir/icons/regular/nav-arrow-down.svg?raw";
 import navArrowRight from "iconoir/icons/regular/nav-arrow-right.svg?raw";
+import packageFile from "iconoir/icons/regular/package.svg?raw";
 import pagePlus from "iconoir/icons/regular/page-plus.svg?raw";
 import play from "iconoir/icons/regular/play.svg?raw";
 import plus from "iconoir/icons/regular/plus.svg?raw";
@@ -36,9 +40,12 @@ import styles from "./Icon.module.css";
 
 /** Every Iconoir icon the app uses. Only these are bundled; add one by importing it here */
 const ICONS = {
+  "app-window": appWindow,
   archive,
+  "box-iso": boxIso,
   "check-circle": checkCircle,
   clock,
+  "code-brackets": codeBrackets,
   computer,
   copy,
   download,
@@ -57,6 +64,7 @@ const ICONS = {
   "music-note": musicNote,
   "nav-arrow-down": navArrowDown,
   "nav-arrow-right": navArrowRight,
+  package: packageFile,
   "page-plus": pagePlus,
   play,
   plus,
