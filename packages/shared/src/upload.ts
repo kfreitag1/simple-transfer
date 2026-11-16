@@ -22,7 +22,8 @@ export interface UploadOptions {
  *
  * Resumable: it starts each file at `file.offset`, so resuming is calling it again with a freshly
  * fetched transfer and the same blobs. `blobs` is keyed by `file.path`; a missing or wrongly sized
- * blob throws before any request is made
+ * blob for a file that still needs bytes throws before any request is made. Complete files need no
+ * blob, because they are never uploaded again
  *
  * Behaviour is specified in ARCHITECTURE.md ("Upload protocol")
  */
@@ -33,7 +34,9 @@ export async function uploadTransfer(
 ): Promise<Transfer> {
   const { baseUrl = "", fetch: request = fetch, onProgress } = options;
   for (const file of transfer.files) {
-    if (blobs.get(file.path)?.size !== file.size) throw new Error(`No blob of ${file.size} bytes for ${file.path}`);
+    if (file.offset < file.size && blobs.get(file.path)?.size !== file.size) {
+      throw new Error(`No blob of ${file.size} bytes for ${file.path}`);
+    }
   }
   // Aborted by the caller, or by the first failing file so the others stop too
   const failed = new AbortController();

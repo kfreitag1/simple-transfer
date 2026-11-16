@@ -130,6 +130,19 @@ test("aborting rejects with the abort reason, also while waiting to retry", asyn
   expect(calls).toBe(1);
 });
 
+test("needs blobs only for files that still lack bytes, so a transfer with completed or empty files resumes", async () => {
+  const transfer = transferOf([
+    { path: "done", size: 5, offset: 5 },
+    { path: "empty", size: 0 },
+    { path: "remaining", size: 3 },
+  ]);
+  const server = fakeServer(transfer, { done: 5, empty: 0, remaining: 0 });
+  const blobs = new Map([["remaining", new Blob([new Uint8Array(3)])]]);
+
+  expect((await uploadTransfer(transfer, blobs, { fetch: server.fetch })).status).toBe("ready");
+  expect(server.calls).toEqual(["remaining@0"]);
+});
+
 test("a missing or wrongly sized blob throws before any request", async () => {
   const transfer = transferOf([{ path: "a", size: 2 }]);
   const fetch = (() => {
