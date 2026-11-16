@@ -14,10 +14,7 @@
   --muted: light-dark(#6f6f6b, #98989a);
   --danger: light-dark(#bf3a2b, #ff8e80);
   --scrim: rgb(0 0 0 / 0.45);
-  --accent: light-dark(
-    oklch(from var(--brand, var(--fg)) min(l, 0.55) c h),
-    oklch(from var(--brand, var(--fg)) max(l, 0.8) c h)
-  );
+  --accent: light-dark(var(--brand-light, var(--fg)), var(--brand-dark, var(--fg)));
   --on-accent: light-dark(#fff, #0f0f10);
   --accent-soft: color-mix(in oklch, var(--accent) 14%, transparent);
   --notice: light-dark(#2f6feb, #6ea8ff);
@@ -44,6 +41,7 @@
   --radius-lg: 16px;
   --control: 2.375rem;
   --control-sm: 1.875rem;
+  --logo-size: 1.125rem;
   --shadow-sm: 0 1px 2px light-dark(rgb(0 0 0 / 0.05), rgb(0 0 0 / 0.4));
   --shadow-md: 0 2px 8px light-dark(rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.45));
   --shadow-lg: 0 12px 32px light-dark(rgb(0 0 0 / 0.14), rgb(0 0 0 / 0.6));

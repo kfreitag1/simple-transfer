@@ -5,7 +5,9 @@ import { type Accessor, createContext, createMemo, from } from "solid-js";
 /** Framework-agnostic on purpose: `better-auth/solid` targets Solid 1 */
 export const authClient = createAuthClient({ plugins: [adminClient()] });
 
-export const signIn = (callbackURL = "/") => authClient.signIn.social({ provider: "oidc", callbackURL });
+/** A failed sign-in comes back to the login page with `?error=` */
+export const signIn = (callbackURL: string) =>
+  authClient.signIn.social({ provider: "oidc", callbackURL, errorCallbackURL: "/login" });
 
 type SessionState = ReturnType<typeof authClient.useSession.get>;
 export type Session = NonNullable<SessionState["data"]>;

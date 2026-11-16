@@ -1,7 +1,7 @@
 import { createRouter } from "@solidjs/router";
 import { render } from "@solidjs/web";
 import { Loading, lazy } from "solid-js";
-import { Layout, NotFound, RequireUser } from "./Layout.tsx";
+import { FailureBoundary, Layout, NotFound, RequireUser } from "./Layout.tsx";
 import "./index.css";
 
 const Router = createRouter({
@@ -25,9 +25,11 @@ render(
   () => (
     <Router>
       {(props) => (
-        <Loading>
-          <Layout>{props.children}</Layout>
-        </Loading>
+        <FailureBoundary>
+          <Loading>
+            <Layout>{props.children}</Layout>
+          </Loading>
+        </FailureBoundary>
       )}
     </Router>
   ),

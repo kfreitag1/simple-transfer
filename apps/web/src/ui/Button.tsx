@@ -47,24 +47,23 @@ export function LinkButton(props: Look & Omit<JSX.AnchorHTMLAttributes<HTMLAncho
   );
 }
 
-/** `label` is both the accessible name and the tooltip */
+/** `label` is the accessible name, and the tooltip unless `tooltip` is false */
 export function IconButton(
-  props: { icon: IconName; label: string; size?: "sm" } & Omit<
+  props: { icon: IconName; label: string; size?: "sm"; tooltip?: boolean } & Omit<
     JSX.ButtonHTMLAttributes<HTMLButtonElement>,
     "class" | "children"
   >,
 ) {
-  const rest = omit(props, "icon", "label", "size");
-  return (
-    <Tooltip text={props.label}>
-      <button
-        type="button"
-        aria-label={props.label}
-        {...rest}
-        class={classes({ variant: "ghost", size: props.size }, true)}
-      >
-        <Icon name={props.icon} />
-      </button>
-    </Tooltip>
+  const rest = omit(props, "icon", "label", "size", "tooltip");
+  const button = () => (
+    <button
+      type="button"
+      aria-label={props.label}
+      {...rest}
+      class={classes({ variant: "ghost", size: props.size }, true)}
+    >
+      <Icon name={props.icon} />
+    </button>
   );
+  return props.tooltip === false ? button() : <Tooltip text={props.label}>{button()}</Tooltip>;
 }
