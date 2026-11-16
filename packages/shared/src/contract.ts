@@ -85,17 +85,26 @@ export const ChunkQuery = Type.Object({ offset: Size });
 export const ChunkResult = Type.Object({ offset: Size });
 export type ChunkResult = Static<typeof ChunkResult>;
 
+/** `path` narrows a zip to one folder or package inside the transfer */
+export const ZipQuery = Type.Object({ path: Type.Optional(Type.String({ minLength: 1, maxLength: MAX_PATH_LENGTH })) });
+
 export const Unlock = Type.Object({ password: Type.String({ minLength: 1, maxLength: MAX_PASSWORD_LENGTH }) });
 
 /** The signed-in user's effective limits and current usage, for client-side pre-flight checks */
 export const Me = Type.Object({ limits: Limits, usedBytes: Size });
 export type Me = Static<typeof Me>;
 
+/** `#rrggbb` for the two theme accents. Unset side follows the other, or the default when both are unset */
+export const Accent = Type.Object({
+  light: Nullable(Type.String({ pattern: "^#[0-9a-fA-F]{6}$" })),
+  dark: Nullable(Type.String({ pattern: "^#[0-9a-fA-F]{6}$" })),
+});
+export type Accent = Static<typeof Accent>;
+
 /** How the instance presents itself, set by an admin. `null` keeps the built-in default */
 export const Branding = Type.Object({
   name: Nullable(Type.String({ minLength: 1, maxLength: MAX_BRAND_NAME_LENGTH })),
-  /** `#rrggbb`. The web app derives the light and dark variants from it */
-  accent: Nullable(Type.String({ pattern: "^#[0-9a-fA-F]{6}$" })),
+  accent: Accent,
   /** A data URL, so it needs no route of its own and cannot run script. Also used as the favicon */
   logo: Nullable(
     Type.String({
@@ -150,3 +159,6 @@ export type Releases = Static<typeof Releases>;
 
 export const AdminStats = Type.Object({ users: Type.Integer(), transfers: Type.Integer(), bytes: Size });
 export type AdminStats = Static<typeof AdminStats>;
+
+export const Health = Type.Object({ ok: Type.Boolean(), db: Type.Boolean(), storage: Type.Boolean() });
+export type Health = Static<typeof Health>;

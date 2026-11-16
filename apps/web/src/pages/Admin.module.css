@@ -127,10 +127,46 @@
   max-inline-size: 24rem;
 }
 
+.accents {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.accentPanel {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.accentPanel[data-scheme="light"] {
+  color-scheme: light;
+}
+
+.accentPanel[data-scheme="dark"] {
+  color-scheme: dark;
+}
+
+.accentLabel {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.accentSwatch {
+  position: relative;
+  display: inline-grid;
+}
+
 .swatch {
-  inline-size: var(--control);
-  block-size: var(--control);
-  padding: 3px;
+  inline-size: calc(var(--control) * 2);
+  block-size: calc(var(--control) * 2);
+  padding: 0;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-md);
   background: var(--surface);
@@ -151,6 +187,21 @@
   border-radius: var(--radius-sm);
 }
 
+.swatchBadge {
+  position: absolute;
+  inset-block-start: calc(var(--space-1) * -1);
+  inset-inline-end: calc(var(--space-1) * -1);
+  box-sizing: content-box;
+  display: grid;
+  place-items: center;
+  inline-size: var(--control-sm);
+  block-size: var(--control-sm);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
 .logo {
   display: grid;
   place-items: center;
@@ -163,7 +214,7 @@
 }
 
 .logo img {
-  block-size: 1.5rem;
+  block-size: var(--logo-size);
   max-inline-size: 8rem;
   object-fit: contain;
 }

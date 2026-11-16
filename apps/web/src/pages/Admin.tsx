@@ -1,6 +1,6 @@
 import { useSearchParams } from "@solidjs/router";
 import { MAX_BRAND_NAME_LENGTH, MAX_LOGO_BYTES, ROLES, type Role } from "@st/shared/constants";
-import type { AdminStats, Releases } from "@st/shared/contract";
+import type { Accent, AdminStats, Releases } from "@st/shared/contract";
 import type { LimitOverride, LimitScope, Limits } from "@st/shared/limits";
 import {
   createMemo,
@@ -16,13 +16,12 @@ import {
 } from "solid-js";
 import { api, ConfigContext, shareUrl, unwrap } from "../api.ts";
 import { authClient, SessionContext } from "../auth.ts";
-import { ErrorText, Expiry, toastError } from "../components.tsx";
+import { type AccentScheme, accentColors } from "../color.ts";
+import { ErrorText, Expiry, Logo, toastError } from "../components.tsx";
 import { formatBytes, formatDuration, formatNumber } from "../i18n/format.ts";
 import { t } from "../i18n/index.ts";
-import { theme } from "../theme.ts";
 import { Button, IconButton } from "../ui/Button.tsx";
 import { Field, Input, Segmented, Select } from "../ui/Field.tsx";
-import { Icon } from "../ui/Icon.tsx";
 import { confirmAction, Dialog, toast } from "../ui/overlays.tsx";
 import { Empty, Page, Panel } from "../ui/surfaces.tsx";
 import { Hinted } from "../ui/Tooltip.tsx";
@@ -73,6 +72,7 @@ function AdminPage() {
   const tab = () => TABS.find((name) => name === search.tab) ?? TABS[0];
   const stats = createMemo(() => unwrap(api.admin.stats.get()));
   const releases = createMemo(() => unwrap(api.admin.releases.get()));
+  // TODO: paginate
   const users = createMemo(async (): Promise<User[]> => {
     const { data, error } = await authClient.admin.listUsers({ query: { limit: 10_000, sortBy: "createdAt" } });
     if (error) throw error;
@@ -294,11 +294,13 @@ function AllTransfers(props: { onChange: () => void }) {
 /** Shown when no global limits are stored yet: everything inherits the unlimited defaults */
 const NO_GLOBAL: LimitOverride = { scope: "global", subject: "", values: {} };
 
+type EditTarget = { override: LimitOverride; isNew: boolean };
+
 function LimitSettings(props: { users: User[] }) {
   const stored = createMemo(() => unwrap(api.admin.limits.get()));
   const global = createMemo(() => stored().find((row) => row.scope === "global") ?? NO_GLOBAL);
   const overrides = createMemo(() => stored().filter((row) => row.scope !== "global"));
-  const [editing, setEditing] = createSignal<LimitOverride>();
+  const [editing, setEditing] = createSignal<EditTarget>();
   const saved = () => {
     setEditing(undefined);
     refresh(stored);
@@ -335,7 +337,11 @@ function LimitSettings(props: { users: User[] }) {
           <h2>
             <Hinted text={t("admin.overridesHint")}>{t("admin.overrides")}</Hinted>
           </h2>
-          <Button size="sm" icon="plus" onClick={() => setEditing({ scope: "role", subject: "user", values: {} })}>
+          <Button
+            size="sm"
+            icon="plus"
+            onClick={() => setEditing({ override: { scope: "role", subject: "user", values: {} }, isNew: true })}
+          >
             {t("admin.addOverride")}
           </Button>
         </div>
@@ -357,7 +363,11 @@ function LimitSettings(props: { users: User[] }) {
                       <For each={FIELDS}>{([key]) => <td>{formatLimit(key, override.values[key])}</td>}</For>
                       <td class={styles.controls}>
                         <div>
-                          <IconButton icon="edit-pencil" label={t("admin.edit")} onClick={() => setEditing(override)} />
+                          <IconButton
+                            icon="edit-pencil"
+                            label={t("admin.edit")}
+                            onClick={() => setEditing({ override, isNew: false })}
+                          />
                           <IconButton icon="trash" label={t("common.delete")} onClick={() => remove(override)} />
                         </div>
                       </td>
@@ -371,8 +381,14 @@ function LimitSettings(props: { users: User[] }) {
       </section>
       <Dialog open={editing() !== undefined} title={t("admin.override")} onClose={() => setEditing(undefined)}>
         <Show when={editing()} keyed>
-          {(initial) => (
-            <LimitEditor initial={initial} users={props.users} onSaved={saved} onCancel={() => setEditing(undefined)} />
+          {(target) => (
+            <LimitEditor
+              initial={target.override}
+              isNew={target.isNew}
+              users={props.users}
+              onSaved={saved}
+              onCancel={() => setEditing(undefined)}
+            />
           )}
         </Show>
       </Dialog>
@@ -383,7 +399,14 @@ function LimitSettings(props: { users: User[] }) {
 type FieldState = { mode: "inherit" | "unlimited" | "value"; amount: string };
 
 /** Edits the global limits, or an override when `onCancel` is given. Only overrides can inherit */
-function LimitEditor(props: { initial: LimitOverride; users: User[]; onSaved: () => void; onCancel?: () => void }) {
+function LimitEditor(props: {
+  initial: LimitOverride;
+  /** Only a new override chooses whom it applies to: scope and subject are what identify a stored one */
+  isNew?: boolean;
+  users: User[];
+  onSaved: () => void;
+  onCancel?: () => void;
+}) {
   // Remounted (keyed) for each row it edits, so the initial values are read once
   const initial = untrack(() => props.initial);
   const isGlobal = initial.scope === "global";
@@ -440,6 +463,7 @@ function LimitEditor(props: { initial: LimitOverride; users: User[]; onSaved: ()
           <Select
             label={t("admin.layer")}
             value={scope()}
+            disabled={!props.isNew}
             onChange={(event) => changeScope(event.currentTarget.value as LimitScope)}
           >
             <For each={["role", "user"] as const}>
@@ -450,6 +474,7 @@ function LimitEditor(props: { initial: LimitOverride; users: User[]; onSaved: ()
             <Select
               label={t("admin.role")}
               value={subject()}
+              disabled={!props.isNew}
               onChange={(event) => setSubject(event.currentTarget.value)}
             >
               <For each={ROLES}>{(role) => <option value={role}>{t(`admin.roles.${role}`)}</option>}</For>
@@ -459,6 +484,7 @@ function LimitEditor(props: { initial: LimitOverride; users: User[]; onSaved: ()
             <Select
               label={t("admin.user")}
               value={subject()}
+              disabled={!props.isNew}
               onChange={(event) => setSubject(event.currentTarget.value)}
             >
               <For each={props.users}>{(user) => <option value={user.id}>{user.email}</option>}</For>
@@ -506,21 +532,50 @@ function LimitEditor(props: { initial: LimitOverride; users: User[]; onSaved: ()
   );
 }
 
+function AccentSwatch(props: {
+  id: string;
+  scheme: AccentScheme;
+  label: string;
+  value: string;
+  explicit: boolean;
+  onInput: (value: string) => void;
+  onClear: () => void;
+}) {
+  return (
+    <div class={styles.accentPanel} data-scheme={props.scheme}>
+      <span class={styles.accentLabel}>{props.label}</span>
+      <div class={styles.accentSwatch}>
+        <input
+          id={props.id}
+          class={styles.swatch}
+          type="color"
+          value={props.value}
+          aria-label={props.label}
+          onInput={(event) => props.onInput(event.currentTarget.value)}
+        />
+        <Show when={props.explicit}>
+          <span class={styles.swatchBadge}>
+            <IconButton icon="xmark" size="sm" label={t("admin.remove")} tooltip={false} onClick={props.onClear} />
+          </span>
+        </Show>
+      </div>
+    </div>
+  );
+}
+
 function InstanceSettings() {
   const config = useContext(ConfigContext);
   const initial = untrack(() => config().settings.branding);
   const [name, setName] = createSignal(initial.name ?? "");
-  const [accent, setAccent] = createSignal(initial.accent);
+  const [accent, setAccent] = createSignal<Accent>(initial.accent);
   const [logo, setLogo] = createSignal(initial.logo);
-  const accentId = createUniqueId();
+  const lightId = createUniqueId();
+  const darkId = createUniqueId();
   const logoId = createUniqueId();
   let file!: HTMLInputElement;
-  /** Without a brand the accent is the text colour (index.css), so the picker starts there. It takes only `#rrggbb` */
-  const unbranded = () => {
-    theme();
-    const [r, g, b] = getComputedStyle(document.body).color.match(/\d+/g)!.map(Number);
-    return `#${[r, g, b].map((n) => n!.toString(16).padStart(2, "0")).join("")}`;
-  };
+  const colors = createMemo(() => accentColors(accent()));
+  const setAccentSide = (scheme: AccentScheme, value: string | null) =>
+    setAccent((current) => ({ ...current, [scheme]: value }));
 
   const pickLogo = () => {
     const image = file.files?.[0];
@@ -560,27 +615,32 @@ function InstanceSettings() {
         onInput={(event) => setName(event.currentTarget.value)}
         maxlength={MAX_BRAND_NAME_LENGTH}
       />
-      <Field for={accentId} label={t("admin.accent")}>
-        <div class="row">
-          <input
-            id={accentId}
-            class={styles.swatch}
-            type="color"
-            value={accent() ?? unbranded()}
-            onInput={(event) => setAccent(event.currentTarget.value)}
+      <Field for={lightId} label={t("admin.accent")} hint={t("admin.accentHint")}>
+        <div class={styles.accents}>
+          <AccentSwatch
+            id={lightId}
+            scheme="light"
+            label={t("admin.accentLight")}
+            value={colors().light}
+            explicit={accent().light !== null}
+            onInput={(value) => setAccentSide("light", value)}
+            onClear={() => setAccentSide("light", null)}
           />
-          <span class="muted small">{accent() ?? t("admin.default")}</span>
-          <Show when={accent()}>
-            <Button variant="ghost" size="sm" onClick={() => setAccent(null)}>
-              {t("admin.reset")}
-            </Button>
-          </Show>
+          <AccentSwatch
+            id={darkId}
+            scheme="dark"
+            label={t("admin.accentDark")}
+            value={colors().dark}
+            explicit={accent().dark !== null}
+            onInput={(value) => setAccentSide("dark", value)}
+            onClear={() => setAccentSide("dark", null)}
+          />
         </div>
       </Field>
       <Field for={logoId} label={t("admin.logo")} hint={t("admin.logoHint", { size: formatBytes(MAX_LOGO_BYTES) })}>
         <div class="row">
           <span class={styles.logo}>
-            <Show when={logo()} fallback={<Icon name="send-diagonal" />}>
+            <Show when={logo()} fallback={<Logo />}>
               {(source) => <img src={source()} alt="" />}
             </Show>
           </span>

@@ -8,6 +8,13 @@
       "when": 1794441629565,
       "tag": "0000_init",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1794776872691,
+      "tag": "0001_accent_pair",
+      "breakpoints": true
     }
   ]
 }

@@ -137,7 +137,8 @@ export const file = sqliteTable(
 export const settings = sqliteTable("settings", {
   id: integer("id").primaryKey(),
   name: text("name"),
-  accent: text("accent"),
+  accentLight: text("accent_light"),
+  accentDark: text("accent_dark"),
   logo: text("logo"),
   updateCheck: integer("update_check", { mode: "boolean" }).notNull().default(true),
 });
