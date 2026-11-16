@@ -36,7 +36,7 @@ jobs:
       - name: Smoke test the image
         run: |
           data="$(mktemp -d)"
-          trap 'docker logs simple-transfer-ci 2>/dev/null || true; docker rm -f simple-transfer-ci >/dev/null 2>&1 || true; rm -rf "$data"' EXIT
+          trap 'docker logs simple-transfer-ci 2>/dev/null || true; docker rm -f simple-transfer-ci >/dev/null 2>&1 || true; sudo rm -rf "$data"' EXIT
           docker run --detach --name simple-transfer-ci \
             --publish 3000:3000 \
             --volume "$data/db:/data/db" \
