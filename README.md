@@ -8,10 +8,9 @@ Self-hosted file sending (like WeTransfer). Sign in, drop files or folders, get 
 
 ## Features
 
-- **Files and folders.** Drag them anywhere onto the window, pick them, or paste
-- **Resumable uploads.** Dopped connections retry automatically, and after a reload/crash you pick the same files again and continue
-- **Password and expiry** per transfer both optional
-- **Downloads** per file (with `Range`, so they can be paused and resumed) or everything as one streamed zip
+- **Resumable uploads.** Dropped connections retry automatically, and after a reload/crash you pick the same files again and continue
+- **Password and expiry** per transfer, both optional
+- **Downloads** per file (with `Range`, so they can be paused and resumed), or everything as a streamed zip
 - **Limits.** Maximum transfer size, storage quota, and maximum/default expiry, set globally and overridden per role/user
 - **Admin panel.** Users (roles, bans), transfers, limits, usage, branding, release notes
 - **Branding.** Instance name, light and dark accent colours, and logo
@@ -23,9 +22,9 @@ https://github.com/user-attachments/assets/9b0e3355-f8a6-49de-8039-d53dff165fd9
 
 You need Docker and an OIDC provider
 
-1. At the provider, create an OIDC client. Sign-in is the authorization code flow with PKCE, so require PKCE if the provider gives the choice. Adding a client secret is optional
+1. At the provider, make an OIDC client. Sign-in is the authorization code flow with PKCE, so require PKCE if given a choice to do so (client secrets are optional)
 
-   The redirect URI is `<BASE_URL>/api/auth/callback/oidc`. Providers that record the redirect URI on first sign-in (Pocket ID, Authentik) can be left blank; otherwise put it in
+   Redirect URI is `<BASE_URL>/api/auth/callback/oidc`, if not auto detected (e.g. with Pocket ID, Authentik)
 
 2. Download the compose file and make a `.env`:
 
@@ -55,13 +54,11 @@ You need Docker and an OIDC provider
    docker compose up -d
    ```
 
-4. Put a reverse proxy with TLS in front of port 3000 and sign in. **The first person to sign in becomes the admin**
+4. Put a reverse proxy with TLS in front (default port 3000) and sign in. **The first person to sign in becomes an admin**
 
-Everyone your provider authenticates gets an account. To restrict who can use the instance, restrict who can reach the client at the provider
+Everyone your ID provider authenticates gets an account, restrict at the provider level if needed
 
-By default no size limit or quota, and transfers don't expire. Set limits in `Admin → Limits`
-
-### Configuration
+### Env var configuration
 
 | Variable | Default | |
 |---|---|---|
@@ -78,17 +75,17 @@ By default no size limit or quota, and transfers don't expire. Set limits in `Ad
 | `DB_PATH` | `/data/db/app.sqlite` | Set by the image |
 | `STORAGE_DIR` | `/data/files` | Set by the image |
 
-Any variable can be read from a file by setting `<NAME>_FILE`, e.g. for docker secrets: `OIDC_CLIENT_SECRET_FILE=/run/secrets/oidc_client_secret`
+Any variable can be also read from a file by setting `<NAME>_FILE`, e.g. for docker secrets: `OIDC_CLIENT_SECRET_FILE=/run/secrets/oidc_client_secret`
 
 ### Reverse proxy
 
-- Allow request bodies of at least 16 MiB (nginx: `client_max_body_size 20m;`). Uploads are chunked, so this doesn't change with bigger files
+- Allow request bodies of at least 16 MiB (nginx: `client_max_body_size 20m;`)
 - Don't buffer responses, or large downloads will be spooled to the proxy's disk first (nginx: `proxy_buffering off;`). Not buffering requests either saves the same for uploads (`proxy_request_buffering off;`)
-- Set `X-Forwarded-For`, and set `TRUST_PROXY=true`. Without it every visitor shares the proxy's address and therefore one rate limit. Leave it `false` if the container is reachable directly, since the header could then be forged
+- Set `X-Forwarded-For`, and set `TRUST_PROXY=true` so that per-IP rate limits work. Set as `false` if the container is reachable directly
 - Don't cache API responses. They are sent `Cache-Control: private, no-store`, but a proxy configured to cache regardless could serve a password-protected download without the unlock cookie
 - Transfer URLs are share secrets: the app sends `Referrer-Policy: no-referrer` and `X-Robots-Tag: noindex`, and `robots.txt` disallows crawlers. Don't publish links you want kept private
 
-E.g. a minimal Caddyfile with Caddy on the host:
+E.g. a minimal Caddyfile:
 
 ```caddyfile
 send.example.com {
@@ -96,7 +93,7 @@ send.example.com {
 }
 ```
 
-Caddy handles TLS and sets `X-Forwarded-For`; no extra body-size or buffering directives are needed. Set `BASE_URL=https://files.example.com` and `TRUST_PROXY=true`. If Caddy runs in Compose on the same network, use `reverse_proxy app:3000` instead
+Caddy handles TLS and sets `X-Forwarded-For`; no extra body-size or buffering directives are needed. Set `BASE_URL=https://files.example.com` and `TRUST_PROXY=true`. If Caddy runs in compose on the same network, use `reverse_proxy app:3000` instead
 
 ### Data
 
@@ -107,17 +104,11 @@ Caddy handles TLS and sets `X-Forwarded-For`; no extra body-size or buffering di
 
 Expired transfers and uploads abandoned for 24 hours are deleted by a sweep every five mins
 
-macOS packages are presented as one file in the UI, but they are directories on disk. The browser upload does not preserve symlinks, executable permissions or package metadata, so a downloaded package may not run. If you need a working app, compress it in Finder before uploading.
-
-`/api/health` is the container healthcheck. It returns `200` only when SQLite can be read, its database file and directory are writable, and `STORAGE_DIR` can be written, and `503` otherwise (`{ "ok": false, "db": ..., "storage": ... }`). The result is cached for five seconds. Compose does not restart an unhealthy container by itself, so use it for monitoring or a `depends_on` health condition
-
 ### Updating
 
 ```sh
 docker compose pull && docker compose up -d
 ```
-
-Images are published to `ghcr.io/kfreitag1/simple-transfer` for amd64 and arm64, tagged `latest`, `X.Y` and `X.Y.Z`. `Admin → Releases` shows the running version, changelog notes, and if new versions are available
 
 ## Development
 
